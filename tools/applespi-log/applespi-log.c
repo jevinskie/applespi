@@ -1,9 +1,9 @@
-#include <stdio.h>
-#include <stdlib.h>
 #undef NDEBUG
 #include <assert.h>
 
 #include <dispatch/dispatch.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <xpc/xpc.h>
 
 static uint64_t g_ctx;
