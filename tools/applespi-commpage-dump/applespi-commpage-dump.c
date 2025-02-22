@@ -1,9 +1,9 @@
-#include <stddef.h>
-#include <stdint.h>
 #undef NDEBUG
 #include <assert.h>
 
 #include <inttypes.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -40,12 +40,12 @@ static void dump_commpage(const char *path, size_t sz) {
 }
 
 int main(void) {
-    printf("apple-spi-commpage-dump begin\n");
+    printf("applespi-commpage-dump begin\n");
     dump_commpage("commpage_dump_start.bin", DUMP_SZ);
     be_busy();
     dump_commpage("commpage_dump_end.bin", DUMP_SZ);
-    printf("apple-spi-commpage-dump done\n");
-    printf("apple-spi-commpage-dump size probe beginning\n");
+    printf("applespi-commpage-dump done\n");
+    printf("applespi-commpage-dump size probe beginning\n");
     for (size_t i = 1; i < 128; ++i) {
         printf("dumping mul: %zu sz: %zu\n", i, i * 1024);
         fflush(stdout);
