@@ -21,12 +21,12 @@ event_handler obj: 0x6000005a80f0 desc: '<dictionary: 0x6000005a80f0> { count = 
 "offset" => <uint64: 0x818847d7e57730e7>: 2923212
 "procid" => <uint64: 0x818847d7b4be8537>: 169192566
 "category" => <string: 0x6000034a83f0> { length = 27, contents = "performance_instrumentation" }
-"name" => <string: 0x6000034a8420> { length = 45, contents = "%{public, signpost.description:begin_time}llu"" }
+"name" => <string: 0x6000034a8420> { length = 45, contents = "%{public, signpost.description:begin_time}" }
 "imageuuid" => <uuid: 0x6000034a8450> "F666CCE9-0B6D-3405-BC17-3B963BB96867"
 "type" => <uint64: 0x818847d7e413d687>: 1536
 "procuuid" => <uuid: 0x6000034a84b0> "A10E0584-2786-38B8-B14C-828C9A9E74C8"
 "uid" => <uint64: 0x818847d7e413e447>: 88
-"formatstring" => <string: 0x6000034a84e0> { length = 45, contents = "%{public, signpost.description:begin_time}llu"" }
+"formatstring" => <string: 0x6000034a84e0> { length = 45, contents = "%{public, signpost.description:begin_time}" }
 "traceid" => <uint64: 0x600003aa9380>: 431391173136121862
 "signpostname" => <string: 0x6000034a8510> { length = 13, contents = "CompositeLoop" }
 "timeGMTsec" => <int64: 0x810847d4d9c103e7>: 1740266668
