@@ -17,9 +17,9 @@ dependencies = [
   "path>=17.1.0",
   "rich>=13.9.4"
 ]
-description = "Python bindings and utilities for libapplespi"
+description = "Python bindings and utilities for applespi library"
 dynamic = ["version"]
-keywords = ["apple", "xnu", "darwin", "macos", "libSystem", "dyld"]
+keywords = ["applespi", "apple-spi", "private-api", "apple", "xnu", "darwin", "macos", "libSystem", "dyld"]
 license = {text = "BSD-2-Clause"}
 name = "applespi"
 readme = {file = 'README.md', content-type = 'text/markdown'}
@@ -37,7 +37,7 @@ dev = [
 applespi-py-util = "applespi.tools.applespi_util:main"
 
 [project.urls]
-repository = "https://github.com/jevinskie/libapplespi"
+repository = "https://github.com/jevinskie/applespi"
 
 [tool.ruff]
 line-length = 120
