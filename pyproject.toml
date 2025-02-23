@@ -40,7 +40,7 @@ applespi-py-util = "applespi.tools.applespi_util:main"
 repository = "https://github.com/jevinskie/applespi"
 
 [tool.ruff]
-line-length = 120
+line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
