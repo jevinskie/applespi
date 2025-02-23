@@ -28,12 +28,58 @@ static void *signal_handler = ^{
     exit(0);
 };
 
-int main(void) {
+int main(int argc, const char **argv) {
+    if (argc != 2) {
+        printf("bad args\n");
+        return 1;
+    }
     const dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
     const dispatch_source_t signal_source =
         dispatch_source_create(DISPATCH_SOURCE_TYPE_SIGNAL, SIGINT, 0, queue);
     dispatch_source_set_event_handler(signal_source, signal_handler);
     dispatch_resume(signal_source);
+
+    pid_t pid = atoi(argv[1]);
+
+    uint8_t pid_filter_bplist[63] = {0x62, 0x70, 0x6C, 0x69, 0x73, 0x74, 0x30, 0x30, 0xD1, 0x01,
+                                     0x02, 0x53, 0x70, 0x69, 0x64, 0xd1, 0x03, 0x04, 0x50};
+    const size_t pid_decimal_ascii_sz_off = 18;
+    const size_t pid_decimal_ascii_off    = 19;
+
+    size_t num_digits = 0;
+    pid_t tpid        = pid;
+    while (tpid) {
+        tpid /= 10;
+        ++num_digits;
+    }
+    assert(num_digits <= 0xF);
+    printf("num_digits: %zu\n", num_digits);
+    pid_filter_bplist[pid_decimal_ascii_sz_off] |= num_digits;
+    tpid = pid;
+    for (size_t i = 0; i < num_digits; ++i) {
+        uint8_t d                                                     = tpid % 10;
+        pid_filter_bplist[pid_decimal_ascii_off + num_digits - 1 - i] = '0' + d;
+        tpid /= 10;
+    }
+    const size_t trailer_off                        = pid_decimal_ascii_off + num_digits;
+    pid_filter_bplist[trailer_off]                  = 0x10;
+    pid_filter_bplist[trailer_off + 1]              = 0x00;
+    pid_filter_bplist[trailer_off + 2]              = 0x08;
+    pid_filter_bplist[trailer_off + 3]              = 0x0b;
+    pid_filter_bplist[trailer_off + 4]              = 0x0f;
+    pid_filter_bplist[trailer_off + 5]              = 0x12;
+    pid_filter_bplist[trailer_off + 6]              = 0x13 + num_digits;
+    pid_filter_bplist[trailer_off + 6 + 6 + 1 + 0]  = 0x01;
+    pid_filter_bplist[trailer_off + 6 + 6 + +1 + 1] = 0x01;
+    // pid_filter_bplist[trailer_off + 6 + 6 + 2] = 0x01;
+    pid_filter_bplist[trailer_off + 6 + 6 + 3 + 7] = 0x05;
+    // pid_filter_bplist[trailer_off + 6 + 6 + 4 + 7] = 0x00;
+    pid_filter_bplist[trailer_off + 6 + 6 + 5 + 7 + 14] = trailer_off + 2;
+    const size_t pid_filter_bplist_sz                   = trailer_off + 6 + 6 + 5 + 7 + 15;
+    printf("pid_filter_bplist_sz: %zu\n", pid_filter_bplist_sz);
+    for (size_t i = 0; i < pid_filter_bplist_sz; ++i) {
+        printf("%02hhx\n", pid_filter_bplist[i]);
+    }
 
     const xpc_connection_t xpc_con =
         xpc_connection_create_mach_service("com.apple.diagnosticd", DISPATCH_TARGET_QUEUE_DEFAULT,
