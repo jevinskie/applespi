@@ -2,8 +2,10 @@
 #include <assert.h>
 
 #include <inttypes.h>
+#include <libproc.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/resource.h>
 #include <unistd.h>
 
 #include <applespi/commpage_spi.h>
@@ -12,6 +14,13 @@ static void be_busy(void) {
     for (int i = 0; i < 10000; ++i) {
         usleep(1);
     }
+}
+
+void dump_rusage(void) {
+    struct rusage_info_v4 ru;
+    proc_pid_rusage(getpid(), RUSAGE_INFO_V4, (rusage_info_t *)&ru);
+    printf("instructions: %" PRIu64 "\n", ru.ri_instructions);
+    printf("cycles: %" PRIu64 "\n", ru.ri_cycles);
 }
 
 static void dump_commpage_time_info(void) {
@@ -34,9 +43,16 @@ static void dump_commpage_time_info(void) {
 
 int main(void) {
     printf("applespi-commpage-util\n");
+    dump_rusage();
     dump_commpage_time_info();
     sleep(1);
+    dump_rusage();
+    for (size_t i = 0; i < (1ull << 24); ++i) {
+        ASPI_COMM_PAGE_APPROX_TIME_VAL;
+    }
+    dump_rusage();
     dump_commpage_time_info();
+    dump_rusage();
     // be_busy();
     return 0;
 }
