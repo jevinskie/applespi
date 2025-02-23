@@ -55,8 +55,11 @@ int main(void) {
     xpc_dictionary_set_uint64(req, "types", 0x8 | 0x4 | 0x2 | 0x1);
 
     printf("con_send_obj obj: %p desc: '%s'\n", req, xpc_copy_description(req));
-    xpc_connection_send_message_with_reply(xpc_con, req, queue, event_handler_conn);
-    dispatch_main();
+    xpc_connection_send_message(xpc_con, req);
+    // dispatch_main();
+    while (true) {
+        usleep(100);
+    }
     printf("post dispatch_main()\n");
     fflush(stdout);
     return EXIT_FAILURE;
