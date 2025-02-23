@@ -1,0 +1,1 @@
+struct aspi_os_empty_files_are_not_c_files;
