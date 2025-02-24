@@ -51,8 +51,8 @@ static void dump_commpage_time_info(void) {
 int main(void) {
     printf("applespi-commpage-util\n");
 
-#if 0
     dump_rusage();
+#if 0
     dump_commpage_time_info();
     sleep(1);
     dump_rusage();
@@ -65,30 +65,33 @@ int main(void) {
 #endif
 
     struct rusage ru;
-    struct rusage_info_v4 ru4  = {{0}};
-    struct rusage_info_v4 ru4c = {{0}};
+    struct rusage_info_v4 ru4   = {{0}};
+    struct rusage_info_v4 ru4c  = {{0}};
+    struct rusage_info_v4 ru4c2 = {{0}};
     pid_t child_pid;
     int child_status;
-    char *child_argv[] = {"/usr/bin/uname", "-a", NULL};
+    char *child_argv[] = {
+        "/opt/homebrew/bin/stress-ng", "--memcpy", "1", "--memcpy-ops", "1000", NULL};
     posix_spawn_file_actions_t fat;
     posix_spawn_file_actions_init(&fat);
     posix_spawnattr_t spawn_attrs;
     int psair = posix_spawnattr_init(&spawn_attrs);
     printf("psair: %d\n", psair);
-    int pssar = posix_spawnattr_setflags(&spawn_attrs, POSIX_SPAWN_START_SUSPENDED);
-    printf("pssar: %d\n", pssar);
-    const int pres =
-        posix_spawn(&child_pid, child_argv[0], NULL, &spawn_attrs, child_argv, environ);
+    // int pssar = posix_spawnattr_setflags(&spawn_attrs, POSIX_SPAWN_START_SUSPENDED);
+    // printf("pssar: %d\n", pssar);
+    const int pres = posix_spawn(&child_pid, child_argv[0], NULL, &spawn_attrs, child_argv, NULL);
     posix_spawnattr_destroy(&spawn_attrs);
-    printf("child_pid: %d\n", child_pid);
+    // printf("child_pid: %d\n", child_pid);
     int prr1 = proc_pid_rusage(child_pid, RUSAGE_INFO_V4, (rusage_info_t *)&ru4);
-    printf("prr1: %x\n", prr1);
-    printf("sleep(1) begin\n");
-    fflush(stdout);
+    // printf("prr1: %x\n", prr1);
+    // printf("sleep(1) begin\n");
+    // fflush(stdout);
     // sleep(1);
-    printf("sleep(1) end\n");
-    fflush(stdout);
-    kill(child_pid, SIGCONT);
+    // printf("sleep(1) end\n");
+    // fflush(stdout);
+    // kill(child_pid, SIGCONT);
+    usleep(1000);
+    int prr3 = proc_pid_rusage(child_pid, RUSAGE_INFO_V4, (rusage_info_t *)&ru4c2);
     // while (waitpid(child_pid, &child_status, 0) != child_pid) {}
     int wr   = wait4(child_pid, &child_status, 0, &ru);
     int prr2 = proc_pid_rusage(child_pid, RUSAGE_INFO_V4, (rusage_info_t *)&ru4c);
@@ -99,6 +102,7 @@ int main(void) {
     printf("child signaled: %d\n", WIFSIGNALED(child_status));
     printf("wr: %d\n", wr);
     printf("prr2: %d\n", prr2);
+    printf("prr3: %d\n", prr3);
     fflush(stdout);
 
     printf("child instructions: %" PRIu64 "\n", ru4.ri_instructions);
@@ -106,6 +110,9 @@ int main(void) {
 
     printf("child copy instructions: %" PRIu64 "\n", ru4c.ri_instructions);
     printf("child copy cycles: %" PRIu64 "\n", ru4c.ri_cycles);
+
+    printf("child copy post-kill instructions: %" PRIu64 "\n", ru4c2.ri_instructions);
+    printf("child copy post-kill cycles: %" PRIu64 "\n", ru4c2.ri_cycles);
 
     // be_busy();
     return 0;
