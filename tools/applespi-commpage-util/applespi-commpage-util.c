@@ -1,4 +1,3 @@
-#include <sys/signal.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -11,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/resource.h>
+#include <sys/signal.h>
 #include <unistd.h>
 
 #include <applespi/commpage_spi.h>
@@ -63,7 +63,8 @@ int main(void) {
     dump_commpage_time_info();
     dump_rusage();
 #endif
-
+    sigset_t mask;
+    siginfo_t info;
     struct rusage ru;
     struct rusage_info_v4 ru4   = {{0}};
     struct rusage_info_v4 ru4c  = {{0}};
@@ -79,6 +80,14 @@ int main(void) {
     printf("psair: %d\n", psair);
     // int pssar = posix_spawnattr_setflags(&spawn_attrs, POSIX_SPAWN_START_SUSPENDED);
     // printf("pssar: %d\n", pssar);
+
+    // pass through to child
+    signal(SIGINT, SIG_IGN);
+    signal(SIGQUIT, SIG_IGN);
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
+    assert(!sigprocmask(SIG_BLOCK, &mask, NULL)); // Block SIGCHLD so we can wait on it explicitly
+
     const int pres = posix_spawn(&child_pid, child_argv[0], NULL, &spawn_attrs, child_argv, NULL);
     posix_spawnattr_destroy(&spawn_attrs);
     // printf("child_pid: %d\n", child_pid);
@@ -90,10 +99,11 @@ int main(void) {
     // printf("sleep(1) end\n");
     // fflush(stdout);
     // kill(child_pid, SIGCONT);
+    sigsuspend(&mask);
     usleep(1000);
     int prr3 = proc_pid_rusage(child_pid, RUSAGE_INFO_V4, (rusage_info_t *)&ru4c2);
     // while (waitpid(child_pid, &child_status, 0) != child_pid) {}
-    int wr   = wait4(child_pid, &child_status, 0, &ru);
+    int wr   = waitpid(child_pid, &child_status, 0);
     int prr2 = proc_pid_rusage(child_pid, RUSAGE_INFO_V4, (rusage_info_t *)&ru4c);
 
     printf("pres: %d\n", pres);
