@@ -44,7 +44,7 @@ int main(void) {
 
     // Get task port for the child
     mach_port_t task_port = MACH_PORT_NULL;
-    kr                    = task_for_pid(mach_task_self(), child_pid, &task_port);
+    kr                    = task_name_for_pid(mach_task_self(), child_pid, &task_port);
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to get task port for PID %d: %s\n", child_pid,
                 mach_error_string(kr));
