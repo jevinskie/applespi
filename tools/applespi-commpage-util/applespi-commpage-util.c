@@ -15,6 +15,8 @@
 
 #include <applespi/commpage_spi.h>
 
+extern char **environ;
+
 static void be_busy(void) {
     for (int i = 0; i < 10000; ++i) {
         usleep(1);
@@ -76,22 +78,27 @@ int main(void) {
     int pssar = posix_spawnattr_setflags(&spawn_attrs, POSIX_SPAWN_START_SUSPENDED);
     printf("pssar: %d\n", pssar);
     const int pres =
-        posix_spawn(&child_pid, "/usr/bin/uname", NULL, &spawn_attrs, child_argv, NULL);
+        posix_spawn(&child_pid, child_argv[0], NULL, &spawn_attrs, child_argv, environ);
     posix_spawnattr_destroy(&spawn_attrs);
     printf("child_pid: %d\n", child_pid);
-    proc_pid_rusage(child_pid, RUSAGE_INFO_V4, (rusage_info_t *)&ru4);
+    int prr1 = proc_pid_rusage(child_pid, RUSAGE_INFO_V4, (rusage_info_t *)&ru4);
+    printf("prr1: %x\n", prr1);
     printf("sleep(1) begin\n");
     fflush(stdout);
-    sleep(1);
+    // sleep(1);
     printf("sleep(1) end\n");
     fflush(stdout);
     kill(child_pid, SIGCONT);
-    while (waitpid(child_pid, &child_status, 0) != child_pid) {}
-    proc_pid_rusage(child_pid, RUSAGE_INFO_V4, (rusage_info_t *)&ru4c);
+    // while (waitpid(child_pid, &child_status, 0) != child_pid) {}
+    int wr   = wait4(child_pid, &child_status, 0, &ru);
+    int prr2 = proc_pid_rusage(child_pid, RUSAGE_INFO_V4, (rusage_info_t *)&ru4c);
 
     printf("pres: %d\n", pres);
+    printf("child status raw: %d\n", child_status);
     printf("child status: %d\n", WEXITSTATUS(child_status));
     printf("child signaled: %d\n", WIFSIGNALED(child_status));
+    printf("wr: %d\n", wr);
+    printf("prr2: %d\n", prr2);
     fflush(stdout);
 
     printf("child instructions: %" PRIu64 "\n", ru4.ri_instructions);
