@@ -1,10 +1,15 @@
+#include <sys/signal.h>
 #undef NDEBUG
 #include <assert.h>
 
+#include <crt_externs.h>
 #include <inttypes.h>
 #include <libproc.h>
+#include <signal.h>
+#include <spawn.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/resource.h>
 #include <unistd.h>
 
@@ -43,6 +48,8 @@ static void dump_commpage_time_info(void) {
 
 int main(void) {
     printf("applespi-commpage-util\n");
+
+#if 0
     dump_rusage();
     dump_commpage_time_info();
     sleep(1);
@@ -53,6 +60,46 @@ int main(void) {
     dump_rusage();
     dump_commpage_time_info();
     dump_rusage();
+#endif
+
+    struct rusage ru;
+    struct rusage_info_v4 ru4  = {{0}};
+    struct rusage_info_v4 ru4c = {{0}};
+    pid_t child_pid;
+    int child_status;
+    char *child_argv[] = {"/usr/bin/uname", "-a", NULL};
+    posix_spawn_file_actions_t fat;
+    posix_spawn_file_actions_init(&fat);
+    posix_spawnattr_t spawn_attrs;
+    int psair = posix_spawnattr_init(&spawn_attrs);
+    printf("psair: %d\n", psair);
+    int pssar = posix_spawnattr_setflags(&spawn_attrs, POSIX_SPAWN_START_SUSPENDED);
+    printf("pssar: %d\n", pssar);
+    const int pres =
+        posix_spawn(&child_pid, "/usr/bin/uname", NULL, &spawn_attrs, child_argv, NULL);
+    posix_spawnattr_destroy(&spawn_attrs);
+    printf("child_pid: %d\n", child_pid);
+    proc_pid_rusage(child_pid, RUSAGE_INFO_V4, (rusage_info_t *)&ru4);
+    printf("sleep(1) begin\n");
+    fflush(stdout);
+    sleep(1);
+    printf("sleep(1) end\n");
+    fflush(stdout);
+    kill(child_pid, SIGCONT);
+    while (waitpid(child_pid, &child_status, 0) != child_pid) {}
+    proc_pid_rusage(child_pid, RUSAGE_INFO_V4, (rusage_info_t *)&ru4c);
+
+    printf("pres: %d\n", pres);
+    printf("child status: %d\n", WEXITSTATUS(child_status));
+    printf("child signaled: %d\n", WIFSIGNALED(child_status));
+    fflush(stdout);
+
+    printf("child instructions: %" PRIu64 "\n", ru4.ri_instructions);
+    printf("child cycles: %" PRIu64 "\n", ru4.ri_cycles);
+
+    printf("child copy instructions: %" PRIu64 "\n", ru4c.ri_instructions);
+    printf("child copy cycles: %" PRIu64 "\n", ru4c.ri_cycles);
+
     // be_busy();
     return 0;
 }

@@ -26,7 +26,7 @@ static HPyDef *AppleSPIMethods[] = {
 };
 
 static HPyModuleDef ffi_def = {
-    .doc     = "applespi applespi-hpy",
+    .doc     = "applespi.ffi applespi-hpy",
     .defines = AppleSPIMethods,
 };
 
