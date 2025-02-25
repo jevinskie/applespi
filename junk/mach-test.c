@@ -1,6 +1,8 @@
 #include <errno.h>
 #include <libproc.h>
+#include <mach/arm/kern_return.h>
 #include <mach/mach.h>
+#include <mach/message.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdio.h>
@@ -17,12 +19,7 @@ int main(void) {
     struct rusage_info_v4 ru4_after_reap  = {{0}};
 
     // Command to run with posix_spawn
-    char *child_argv[] = {"/opt/homebrew/bin/stress-ng", // Path to executable
-                          "--memcpy",
-                          "1", // One memcpy worker
-                          "--memcpy-ops",
-                          "100", // Perform 100 operations
-                          NULL};
+    char *child_argv[] = {"/Users/jevin/code/apple/utils/applespi/ret", NULL};
 
     // Initialize spawn attributes
     posix_spawnattr_t spawn_attrs;
@@ -72,6 +69,18 @@ int main(void) {
         mach_port_deallocate(mach_task_self(), notification_port);
         kill(child_pid, SIGKILL); // Kill the suspended child
         return EXIT_FAILURE;
+    }
+
+    audit_token_t token;
+    mach_msg_type_number_t info_size = TASK_AUDIT_TOKEN_COUNT;
+    const kern_return_t tir =
+        task_info(task_port, TASK_AUDIT_TOKEN, (integer_t *)&token, &info_size);
+    if (tir != KERN_SUCCESS) {
+        printf("task_info returned %d\n", tir);
+        return EXIT_FAILURE;
+    }
+    for (int i = 0; i < 8; ++i) {
+        printf("audit_token[%d]: 0x%08x\n", i, token.val[i]);
     }
 
     // Now allow the child to continue
