@@ -3,8 +3,10 @@
 #include <mach/arm/kern_return.h>
 #include <mach/mach.h>
 #include <mach/message.h>
+#include <mach/port.h>
 #include <signal.h>
 #include <spawn.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/resource.h>
@@ -15,15 +17,49 @@ int main(void) {
     pid_t child_pid;
     int child_status;
     kern_return_t kr;
+    mach_msg_type_number_t audit_token_size;
     struct rusage_info_v4 ru4_before_reap = {{0}};
     struct rusage_info_v4 ru4_after_reap  = {{0}};
 
     // Command to run with posix_spawn
     char *child_argv[] = {"/Users/jevin/code/apple/utils/applespi/ret", NULL};
 
+    audit_token_t self_token;
+    audit_token_size = TASK_AUDIT_TOKEN_COUNT;
+    const kern_return_t tir =
+        task_info(mach_task_self(), TASK_AUDIT_TOKEN, (integer_t *)&self_token, &audit_token_size);
+    if (tir != KERN_SUCCESS) {
+        printf("task_info returned %d\n", tir);
+        return EXIT_FAILURE;
+    }
+    for (int i = 0; i < 8; ++i) {
+        printf("self_token[%d]: 0x%08x\n", i, self_token.val[i]);
+    }
+    printf("self_pid: 0x%08x %u\n", (uint32_t)getpid(), (uint32_t)getpid());
+    printf("\n");
+
+    const uint32_t self_asid = self_token.val[6];
+    printf("self_asid: 0x%08x %u\n", self_asid, self_asid);
+    mach_port_name_t self_ass_port = audit_session_self();
+    printf("self_ass_port: 0x%08x %u\n", self_ass_port, self_ass_port);
+
+    mach_port_name_t audit_port = MACH_PORT_NULL;
+    printf("audit_port pre-init: %u\n", audit_port);
+    const int aspr = audit_session_port(self_asid, &audit_port);
+    printf("aspr: %d audit_port: 0x%08x %u\n", aspr, audit_port, audit_port);
+    if (aspr) {
+        return EXIT_FAILURE;
+    }
+
     // Initialize spawn attributes
     posix_spawnattr_t spawn_attrs;
     posix_spawnattr_init(&spawn_attrs);
+
+    const int saspr = posix_spawnattr_setauditsessionport_np(&spawn_attrs, audit_port);
+    printf("saspr: %d\n", saspr);
+    if (saspr) {
+        return EXIT_FAILURE;
+    }
 
     // Start the process in suspended state so we can set up monitoring
     posix_spawnattr_setflags(&spawn_attrs, POSIX_SPAWN_START_SUSPENDED);
@@ -71,17 +107,21 @@ int main(void) {
         return EXIT_FAILURE;
     }
 
-    audit_token_t token;
-    mach_msg_type_number_t info_size = TASK_AUDIT_TOKEN_COUNT;
-    const kern_return_t tir =
-        task_info(task_port, TASK_AUDIT_TOKEN, (integer_t *)&token, &info_size);
-    if (tir != KERN_SUCCESS) {
-        printf("task_info returned %d\n", tir);
+    audit_token_t child_token;
+    audit_token_size = TASK_AUDIT_TOKEN_COUNT;
+    const kern_return_t tir2 =
+        task_info(task_port, TASK_AUDIT_TOKEN, (integer_t *)&child_token, &audit_token_size);
+    if (tir2 != KERN_SUCCESS) {
+        printf("task_info 2 returned %d\n", tir2);
         return EXIT_FAILURE;
     }
     for (int i = 0; i < 8; ++i) {
-        printf("audit_token[%d]: 0x%08x\n", i, token.val[i]);
+        printf("child_token[%d]: 0x%08x\n", i, child_token.val[i]);
     }
+    printf("child_pid: 0x%08x %u\n", (uint32_t)child_pid, (uint32_t)child_pid);
+
+    const uint32_t child_asid = child_token.val[6];
+    printf("child_asid: 0x%08x %u\n", child_asid, child_asid);
 
     // Now allow the child to continue
     printf("Resuming child process...\n");
