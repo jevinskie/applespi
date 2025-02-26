@@ -1,3 +1,4 @@
+#include <bsm/audit.h>
 #include <errno.h>
 #include <libproc.h>
 #include <mach/arm/kern_return.h>
@@ -18,8 +19,16 @@ int main(void) {
     int child_status;
     kern_return_t kr;
     mach_msg_type_number_t audit_token_size;
-    struct rusage_info_v4 ru4_before_reap = {{0}};
-    struct rusage_info_v4 ru4_after_reap  = {{0}};
+    struct rusage_info_v4 ru4_before_reap       = {{0}};
+    struct rusage_info_v4 ru4_after_reap        = {{0}};
+    auditinfo_addr_t auinfo_trigger_new_session = {
+        .ai_termid =
+            {
+                .at_type = AU_IPv4,
+            },
+        .ai_auid = AU_DEFAUDITID,
+        .ai_asid = AU_ASSIGN_ASID,
+    };
 
     // Command to run with posix_spawn
     char *child_argv[] = {"/Users/jevin/code/apple/utils/applespi/ret", NULL};
