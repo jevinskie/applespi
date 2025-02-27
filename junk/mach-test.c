@@ -58,10 +58,24 @@ int main(void) {
     printf("aspr: %d audit_port_orig: 0x%08x %u\n", aspr, audit_port_orig, audit_port_orig);
     assert(!aspr);
 
-    const int saspr = posix_spawnattr_setauditsessionport_np(&spawn_attrs, audit_port_orig);
+    auditinfo_addr_t auinfo_trigger_new_session = {
+        .ai_termid =
+            {
+                .at_type = AU_IPv4,
+            },
+        .ai_auid = AU_DEFAUDITID,
+        .ai_asid = AU_ASSIGN_ASID,
+    };
+    if (setaudit_addr(&auinfo_trigger_new_session, sizeof(auinfo_trigger_new_session))) {
+        perror("setaudit_addr");
+    }
+    au_asid_t new_asid = AU_ASSIGN_ASID;
+    printf("new_asid init: 0x%08x\n", new_asid);
+    const int saspr = posix_spawnattr_setauditsessionport_np(&spawn_attrs, self_asid_orig);
     if (saspr) {
         perror("posix_spawnattr_setauditsessionport_np");
     }
+    printf("new_asid fini: 0x%08x\n", new_asid);
 
     audit_token_t self_token_during;
     audit_token_size = TASK_AUDIT_TOKEN_COUNT;
