@@ -1,3 +1,6 @@
+#undef NDEBUG
+#include <assert.h>
+
 #include <bsm/audit.h>
 #include <errno.h>
 #include <libproc.h>
@@ -18,57 +21,93 @@ int main(void) {
     pid_t child_pid;
     int child_status;
     kern_return_t kr;
+    kern_return_t tir;
+    int aspr;
     mach_msg_type_number_t audit_token_size;
-    struct rusage_info_v4 ru4_before_reap       = {{0}};
-    struct rusage_info_v4 ru4_after_reap        = {{0}};
-    auditinfo_addr_t auinfo_trigger_new_session = {
-        .ai_termid =
-            {
-                .at_type = AU_IPv4,
-            },
-        .ai_auid = AU_DEFAUDITID,
-        .ai_asid = AU_ASSIGN_ASID,
-    };
-
-    // Command to run with posix_spawn
-    char *child_argv[] = {"/Users/jevin/code/apple/utils/applespi/ret", NULL};
-
-    audit_token_t self_token;
-    audit_token_size = TASK_AUDIT_TOKEN_COUNT;
-    const kern_return_t tir =
-        task_info(mach_task_self(), TASK_AUDIT_TOKEN, (integer_t *)&self_token, &audit_token_size);
-    if (tir != KERN_SUCCESS) {
-        printf("task_info returned %d\n", tir);
-        return EXIT_FAILURE;
-    }
-    for (int i = 0; i < 8; ++i) {
-        printf("self_token[%d]: 0x%08x\n", i, self_token.val[i]);
-    }
-    printf("self_pid: 0x%08x %u\n", (uint32_t)getpid(), (uint32_t)getpid());
-    printf("\n");
-
-    const uint32_t self_asid = self_token.val[6];
-    printf("self_asid: 0x%08x %u\n", self_asid, self_asid);
-    mach_port_name_t self_ass_port = audit_session_self();
-    printf("self_ass_port: 0x%08x %u\n", self_ass_port, self_ass_port);
-
-    mach_port_name_t audit_port = MACH_PORT_NULL;
-    printf("audit_port pre-init: %u\n", audit_port);
-    const int aspr = audit_session_port(self_asid, &audit_port);
-    printf("aspr: %d audit_port: 0x%08x %u\n", aspr, audit_port, audit_port);
-    if (aspr) {
-        return EXIT_FAILURE;
-    }
+    struct rusage_info_v4 ru4_before_reap = {{0}};
+    struct rusage_info_v4 ru4_after_reap  = {{0}};
 
     // Initialize spawn attributes
     posix_spawnattr_t spawn_attrs;
     posix_spawnattr_init(&spawn_attrs);
 
-    const int saspr = posix_spawnattr_setauditsessionport_np(&spawn_attrs, audit_port);
-    printf("saspr: %d\n", saspr);
-    if (saspr) {
+    // Command to run with posix_spawn
+    char *child_argv[] = {"/Users/jevin/code/apple/utils/applespi/ret", NULL};
+
+    audit_token_t self_token_orig;
+    audit_token_size = TASK_AUDIT_TOKEN_COUNT;
+    tir              = task_info(mach_task_self(), TASK_AUDIT_TOKEN, (integer_t *)&self_token_orig,
+                                 &audit_token_size);
+    if (tir != KERN_SUCCESS) {
+        printf("task_info returned %d\n", tir);
         return EXIT_FAILURE;
     }
+    for (int i = 0; i < 8; ++i) {
+        printf("self_token_orig[%d]: 0x%08x\n", i, self_token_orig.val[i]);
+    }
+    printf("self_pid: 0x%08x %u\n", (uint32_t)getpid(), (uint32_t)getpid());
+    printf("\n");
+
+    const uint32_t self_asid_orig = self_token_orig.val[6];
+    printf("self_asid_orig: 0x%08x %u\n", self_asid_orig, self_asid_orig);
+    mach_port_name_t self_ass_port_orig = audit_session_self();
+    printf("self_ass_port_orig: 0x%08x %u\n", self_ass_port_orig, self_ass_port_orig);
+
+    mach_port_name_t audit_port_orig = MACH_PORT_NULL;
+    aspr                             = audit_session_port(self_asid_orig, &audit_port_orig);
+    printf("aspr: %d audit_port_orig: 0x%08x %u\n", aspr, audit_port_orig, audit_port_orig);
+    assert(!aspr);
+
+    const int saspr = posix_spawnattr_setauditsessionport_np(&spawn_attrs, audit_port_orig);
+    if (saspr) {
+        perror("posix_spawnattr_setauditsessionport_np");
+    }
+
+    audit_token_t self_token_during;
+    audit_token_size = TASK_AUDIT_TOKEN_COUNT;
+    tir = task_info(mach_task_self(), TASK_AUDIT_TOKEN, (integer_t *)&self_token_during,
+                    &audit_token_size);
+    if (tir != KERN_SUCCESS) {
+        printf("task_info returned %d\n", tir);
+        return EXIT_FAILURE;
+    }
+    for (int i = 0; i < 8; ++i) {
+        printf("self_token_during[%d]: 0x%08x\n", i, self_token_during.val[i]);
+    }
+    printf("\n");
+
+    const uint32_t self_asid_during = self_token_during.val[6];
+    printf("self_asid_during: 0x%08x %u\n", self_asid_during, self_asid_during);
+    mach_port_name_t self_ass_port_during = audit_session_self();
+    printf("self_ass_port_during: 0x%08x %u\n", self_ass_port_during, self_ass_port_during);
+
+    mach_port_name_t audit_port_during = MACH_PORT_NULL;
+    aspr                               = audit_session_port(self_asid_during, &audit_port_during);
+    printf("aspr: %d audit_port_during: 0x%08x %u\n", aspr, audit_port_during, audit_port_during);
+    assert(!aspr);
+
+    audit_token_t self_token_after;
+    audit_token_size = TASK_AUDIT_TOKEN_COUNT;
+    tir              = task_info(mach_task_self(), TASK_AUDIT_TOKEN, (integer_t *)&self_token_after,
+                                 &audit_token_size);
+    if (tir != KERN_SUCCESS) {
+        printf("task_info returned %d\n", tir);
+        return EXIT_FAILURE;
+    }
+    for (int i = 0; i < 8; ++i) {
+        printf("self_token_after[%d]: 0x%08x\n", i, self_token_after.val[i]);
+    }
+    printf("\n");
+
+    const uint32_t self_asid_after = self_token_after.val[6];
+    printf("self_asid_after: 0x%08x %u\n", self_asid_after, self_asid_after);
+    mach_port_name_t self_ass_port_after = audit_session_self();
+    printf("self_ass_port_after: 0x%08x %u\n", self_ass_port_after, self_ass_port_after);
+
+    mach_port_name_t audit_port_after = MACH_PORT_NULL;
+    aspr                              = audit_session_port(self_asid_after, &audit_port_after);
+    printf("aspr: %d audit_port_after: 0x%08x %u\n", aspr, audit_port_after, audit_port_after);
+    assert(!aspr);
 
     // Start the process in suspended state so we can set up monitoring
     posix_spawnattr_setflags(&spawn_attrs, POSIX_SPAWN_START_SUSPENDED);
