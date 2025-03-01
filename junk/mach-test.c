@@ -26,19 +26,20 @@ void token_thingy(mach_port_t port) {
     };
     struct msg_s msg          = {};
     mach_msg_size_t recv_size = sizeof(msg.trailer);
-    mach_msg_option_t options = MACH_RCV_MSG | MACH_RCV_TIMEOUT |
+    mach_msg_option_t options = MACH_SEND_MSG | MACH_RCV_MSG |
                                 MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
                                 MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
     // mach_msg_option_t options = MACH_RCV_MSG | MACH_RCV_TRAILER_AUDIT;
-    msg.header.msgh_size         = sizeof(msg.header);
-    msg.header.msgh_remote_port  = port;
-    msg.header.msgh_local_port   = mach_task_self();
-    msg.header.msgh_voucher_port = MACH_PORT_NULL;
+    // msg.header.msgh_size         = sizeof(msg.header);
+    // msg.header.msgh_remote_port  = port;
+    // msg.header.msgh_local_port   = mach_task_self();
+    // msg.header.msgh_voucher_port = MACH_PORT_NULL;
 
     printf("token_thiny port: %u 0x%08x\n", port, port);
 
-    kern_return_t kr = mach_msg(&msg.header, options, msg.header.msgh_size, recv_size, port,
-                                MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
+    kern_return_t kr =
+        mach_msg_overwrite(&msg.header, options, sizeof(msg), recv_size, mach_task_self(),
+                           MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL, NULL, 0);
     if (kr != KERN_SUCCESS) {
         printf("mach_msg receive failed: 0x%08xu a.k.a '%s'\n", kr, mach_error_string(kr));
         abort();
