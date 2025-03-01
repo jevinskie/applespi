@@ -118,14 +118,16 @@ static void token_thingy(mach_port_t port) {
     }
 #endif
     mach_msg_header_t hdr = {
-        .msgh_remote_port = port,
         .msgh_local_port  = MACH_PORT_NULL,
-        .msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, MACH_MSG_TYPE_MOVE_SEND, 0),
-        .msgh_id   = 1,
-        .msgh_size = sizeof(hdr),
+        .msgh_remote_port = port,
+        .msgh_bits        = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0),
+        .msgh_id          = 243243,
+        .msgh_size        = sizeof(hdr),
     };
 
-    kr = mach_msg(&hdr, MACH_SEND_MSG, sizeof(hdr), 0, MACH_PORT_NULL, 0, 0);
+    // kr = mach_msg(&hdr, MACH_SEND_MSG, sizeof(hdr), 0, MACH_PORT_NULL, 0, 0);
+    kr = mach_msg2(&hdr, MACH64_SEND_MSG | MACH64_SEND_KOBJECT_CALL, hdr, hdr.msgh_size, 0,
+                   MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
     if (kr != KERN_SUCCESS) {
         printf("mach_msg receive failed: 0x%08xu a.k.a '%s'\n", kr, mach_error_string(kr));
         abort();
