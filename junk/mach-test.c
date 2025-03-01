@@ -20,17 +20,24 @@
 void token_thingy(mach_port_t port) {
     struct msg_s {
         mach_msg_header_t header;
+        mach_msg_body_t body;
+        mach_msg_port_descriptor_t port;
         mach_msg_audit_trailer_t trailer;
     };
     struct msg_s msg          = {};
-    mach_msg_size_t recv_size = sizeof(msg);
+    mach_msg_size_t recv_size = sizeof(msg.trailer);
     mach_msg_option_t options = MACH_RCV_MSG | MACH_RCV_TIMEOUT |
                                 MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
                                 MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
+    // mach_msg_option_t options = MACH_RCV_MSG | MACH_RCV_TRAILER_AUDIT;
+    msg.header.msgh_size         = sizeof(msg.header);
+    msg.header.msgh_remote_port  = port;
+    msg.header.msgh_local_port   = mach_task_self();
+    msg.header.msgh_voucher_port = MACH_PORT_NULL;
 
     printf("token_thiny port: %u 0x%08x\n", port, port);
 
-    kern_return_t kr = mach_msg(&msg.header, options, sizeof(msg), recv_size, port,
+    kern_return_t kr = mach_msg(&msg.header, options, msg.header.msgh_size, recv_size, port,
                                 MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
     if (kr != KERN_SUCCESS) {
         printf("mach_msg receive failed: 0x%08xu a.k.a '%s'\n", kr, mach_error_string(kr));
@@ -58,16 +65,18 @@ int main(int argc, char **argv) {
     pid_t child_pid;
     int child_status;
     kern_return_t kr;
+#if DO_AUDIT
     kern_return_t tir;
     int aspr;
     mach_msg_type_number_t audit_token_size;
+#endif
     struct rusage_info_v4 ru4_before_reap = {};
-    struct rusage_info_v4 ru4_after_reap  = {};
 
     // Initialize spawn attributes
     posix_spawnattr_t spawn_attrs;
     posix_spawnattr_init(&spawn_attrs);
 
+#if DO_AUDIT
     audit_token_t self_token_orig;
     audit_token_size = TASK_AUDIT_TOKEN_COUNT;
     tir              = task_info(mach_task_self(), TASK_AUDIT_TOKEN, (integer_t *)&self_token_orig,
@@ -156,6 +165,7 @@ int main(int argc, char **argv) {
     aspr                              = audit_session_port(self_asid_after, &audit_port_after);
     printf("aspr: %d audit_port_after: 0x%08x %u\n", aspr, audit_port_after, audit_port_after);
     assert(!aspr);
+#endif
 
     // Start the process in suspended state so we can set up monitoring
     posix_spawnattr_setflags(&spawn_attrs, POSIX_SPAWN_START_SUSPENDED);
@@ -174,6 +184,7 @@ int main(int argc, char **argv) {
     // Get task port for the child
     mach_port_t child_task_name_port = MACH_PORT_NULL;
     kr = task_name_for_pid(mach_task_self(), child_pid, &child_task_name_port);
+    // kr = task_for_pid(mach_task_self(), child_pid, &child_task_name_port);
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to get task port for PID %d: %s\n", child_pid,
                 mach_error_string(kr));
@@ -208,6 +219,7 @@ int main(int argc, char **argv) {
     printf("prev_notif_port: %u 0x%08x\n", prev_notif_port, prev_notif_port);
     printf("notification_port: %u 0x%08x\n", notification_port, notification_port);
 
+#if DO_AUDIT
     audit_token_t child_token_susp;
     audit_token_size = TASK_AUDIT_TOKEN_COUNT;
     tir = task_info(child_task_name_port, TASK_AUDIT_TOKEN, (integer_t *)&child_token_susp,
@@ -236,6 +248,7 @@ int main(int argc, char **argv) {
 
     const uint32_t child_asid = child_token.val[6];
     printf("child_asid: 0x%08x %u\n", child_asid, child_asid);
+#endif
 
     // Now allow the child to continue
     printf("Resuming child process...\n");
@@ -243,6 +256,9 @@ int main(int argc, char **argv) {
 
     printf("Waiting for child process (PID %d) to exit...\n", child_pid);
 
+    usleep(1000);
+
+    token_thingy(mach_task_self());
     // token_thingy(child_task_name_port);
 
     // Prepare to receive the dead-name notification
