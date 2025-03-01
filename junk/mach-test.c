@@ -71,11 +71,11 @@ int main(void) {
     }
     au_asid_t new_asid = AU_ASSIGN_ASID;
     printf("new_asid init: 0x%08x\n", new_asid);
-    const int saspr = posix_spawnattr_setauditsessionport_np(&spawn_attrs, self_asid_orig);
-    if (saspr) {
-        perror("posix_spawnattr_setauditsessionport_np");
-    }
-    printf("new_asid fini: 0x%08x\n", new_asid);
+    // const int saspr = posix_spawnattr_setauditsessionport_np(&spawn_attrs, self_asid_orig);
+    // if (saspr) {
+    //     perror("posix_spawnattr_setauditsessionport_np");
+    // }
+    // printf("new_asid fini: 0x%08x\n", new_asid);
 
     audit_token_t self_token_during;
     audit_token_size = TASK_AUDIT_TOKEN_COUNT;
@@ -146,6 +146,18 @@ int main(void) {
         kill(child_pid, SIGKILL); // Kill the suspended child
         return EXIT_FAILURE;
     }
+
+    audit_token_t child_token_susp;
+    audit_token_size = TASK_AUDIT_TOKEN_COUNT;
+    tir = task_info(task_port, TASK_AUDIT_TOKEN, (integer_t *)&child_token_susp, &audit_token_size);
+    if (tir != KERN_SUCCESS) {
+        printf("task_info on child returned %d\n", tir);
+        return EXIT_FAILURE;
+    }
+    for (int i = 0; i < 8; ++i) {
+        printf("child_token_susp[%d]: 0x%08x\n", i, child_token_susp.val[i]);
+    }
+    printf("\n");
 
     // Create a notification port
     mach_port_t notification_port = MACH_PORT_NULL;
