@@ -1,4 +1,4 @@
-#include <mach/kern_return.h>
+#define PRIVATE
 #undef NDEBUG
 #include <assert.h>
 
@@ -18,7 +18,58 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-void token_thingy(mach_port_t port) {
+#define MACH64_MSG_OPTION_NONE   0ull
+#define MACH64_SEND_MSG          MACH_SEND_MSG
+#define MACH64_MSG_VECTOR        0x0000000100000000ull
+#define MACH64_SEND_KOBJECT_CALL 0x0000000200000000ull
+#define MACH64_SEND_MQ_CALL      0x0000000400000000ull
+#define MACH64_SEND_ANY          0x0000000800000000ull
+#define MACH64_SEND_DK_CALL      0x0000001000000000ull
+
+typedef struct {
+    /* a mach_msg_header_t* or mach_msg_aux_header_t* */
+    mach_vm_address_t msgv_data;
+    /* if msgv_rcv_addr is non-zero, use it as rcv address instead */
+    mach_vm_address_t msgv_rcv_addr;
+    mach_msg_size_t msgv_send_size;
+    mach_msg_size_t msgv_rcv_size;
+} mach_msg_vector_t;
+
+extern mach_msg_return_t mach_msg2_internal(void *data, uint64_t option64,
+                                            uint64_t msgh_bits_and_send_size,
+                                            uint64_t msgh_remote_and_local_port,
+                                            uint64_t msgh_voucher_and_id,
+                                            uint64_t desc_count_and_rcv_name,
+                                            uint64_t rcv_size_and_priority, uint64_t timeout);
+
+static mach_msg_return_t mach_msg2(void *data, uint64_t option64, mach_msg_header_t header,
+                                   mach_msg_size_t send_size, mach_msg_size_t rcv_size,
+                                   mach_port_t rcv_name, uint64_t timeout, uint32_t priority) {
+    mach_msg_base_t *base;
+    mach_msg_size_t descriptors;
+
+    if (option64 & MACH64_MSG_VECTOR) {
+        base = (mach_msg_base_t *)((mach_msg_vector_t *)data)->msgv_data;
+    } else {
+        base = (mach_msg_base_t *)data;
+    }
+
+    if ((option64 & MACH64_SEND_MSG) && (base->header.msgh_bits & MACH_MSGH_BITS_COMPLEX)) {
+        descriptors = base->body.msgh_descriptor_count;
+    } else {
+        descriptors = 0;
+    }
+
+#define MACH_MSG2_SHIFT_ARGS(lo, hi) ((uint64_t)hi << 32 | (uint32_t)lo)
+    return mach_msg2_internal(data, option64, MACH_MSG2_SHIFT_ARGS(header.msgh_bits, send_size),
+                              MACH_MSG2_SHIFT_ARGS(header.msgh_remote_port, header.msgh_local_port),
+                              MACH_MSG2_SHIFT_ARGS(header.msgh_voucher_port, header.msgh_id),
+                              MACH_MSG2_SHIFT_ARGS(descriptors, rcv_name),
+                              MACH_MSG2_SHIFT_ARGS(rcv_size, priority), timeout);
+#undef MACH_MSG2_SHIFT_ARGS
+}
+
+static void token_thingy(mach_port_t port) {
     printf("token_thiny port: %u 0x%08x\n", port, port);
     kern_return_t kr = KERN_FAILURE;
 
@@ -81,10 +132,28 @@ void token_thingy(mach_port_t port) {
     }
 }
 
+static void cfi_test_two_bits_set(void) {
+    printf("[Crasher]: Try sending mach_msg2() but setting 2 CFI bits\n");
+
+    mach_msg_header_t header;
+    kern_return_t kr;
+
+    header.msgh_local_port  = MACH_PORT_NULL;
+    header.msgh_remote_port = mach_task_self();
+    header.msgh_id          = 3409;
+    header.msgh_bits        = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
+    header.msgh_size        = sizeof(header);
+
+    kr = mach_msg2(&header, MACH64_SEND_MSG | MACH64_SEND_MQ_CALL, header, header.msgh_size, 0,
+                   MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
+    printf("[Crasher cfi_test_two_bits_set]: mach_msg2() returned %d\n", kr);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         printf("usage: mach-test <child executable to spawn> <child args>");
     }
+    cfi_test_two_bits_set();
     pid_t child_pid;
     int child_status;
     kern_return_t kr;
