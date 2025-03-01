@@ -69,7 +69,7 @@ void token_thingy(mach_port_t port) {
     mach_msg_header_t hdr = {
         .msgh_remote_port = port,
         .msgh_local_port  = MACH_PORT_NULL,
-        .msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_MAKE_SEND, 0, MACH_MSG_TYPE_MOVE_SEND, 0),
+        .msgh_bits = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, MACH_MSG_TYPE_MOVE_SEND, 0),
         .msgh_id   = 1,
         .msgh_size = sizeof(hdr),
     };
