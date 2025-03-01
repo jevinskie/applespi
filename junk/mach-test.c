@@ -107,6 +107,18 @@ typedef struct _voucher_mach_udata_aux_s {
     _voucher_mach_udata_s udata;
 } _voucher_mach_udata_aux_s;
 
+struct dispatch_tsd_indexes_s {
+    // always add new fields at the end
+    const uint16_t dti_version;
+    const uint16_t dti_queue_index;
+    const uint16_t dti_voucher_index;
+    const uint16_t dti_qos_class_index;
+    /* version 3 */
+    const uint16_t dti_continuation_cache_index;
+};
+
+extern struct dispatch_tsd_indexes_s dispatch_tsd_indexes;
+
 struct dispatch_tsd {
     pid_t tid;
     void *dispatch_queue_key;
@@ -154,15 +166,8 @@ static int my_os_tsd_set_direct(unsigned long slot, void *val) {
     return 0;
 }
 
-static struct dispatch_tsd *my_dispatch_get_tsd_base(void) {
-    OS_COMPILER_CAN_ASSUME(__dispatch_tsd.tid != 0);
-    return &__dispatch_tsd;
-}
-
-#define my_dispatch_thread_getspecific(key) (my_dispatch_get_tsd_base()->key)
-
 static voucher_t my_voucher_get(void) {
-    return my_dispatch_thread_getspecific(dispatch_voucher_key);
+    return my_os_tsd_get_direct(OS_VOUCHER_TSD_KEY);
 }
 
 static mach_msg_size_t my_voucher_mach_msg_fill_aux(mach_msg_aux_header_t *aux,
@@ -447,7 +452,7 @@ static void token_thingy(mach_port_t port) {
         .msgh_size        = sizeof(hdr),
     };
 
-    // kr = mach_msg(&hdr, MACH_SEND_MSG, hdr.msgh_size, 0, MACH_PORT_NULL, 0, 0);
+    // kr = my_mach_msg(&hdr, MACH_SEND_MSG, hdr.msgh_size, 0, MACH_PORT_NULL, 0, 0);
     kr = my_mach_msg2(&hdr, MACH64_SEND_MSG | MACH64_SEND_KOBJECT_CALL, hdr, hdr.msgh_size, 0,
                       MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
     if (kr != KERN_SUCCESS) {
@@ -478,6 +483,11 @@ int main(int argc, char **argv) {
         printf("usage: mach-test <child executable to spawn> <child args>");
     }
     cfi_test_two_bits_set();
+
+    printf("dispatch_tsd_indexes: %d\n", dispatch_tsd_indexes.dti_voucher_index);
+    printf("dti_continuation_cache_index: %d\n", dispatch_tsd_indexes.dti_continuation_cache_index);
+    fflush(stdout);
+
     pid_t child_pid;
     int child_status;
     kern_return_t kr;
