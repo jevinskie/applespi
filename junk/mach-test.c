@@ -25,6 +25,15 @@
 #define MACH64_SEND_MQ_CALL      0x0000000400000000ull
 #define MACH64_SEND_ANY          0x0000000800000000ull
 #define MACH64_SEND_DK_CALL      0x0000001000000000ull
+#define MACH64_SEND_INTERRUPT    MACH_SEND_INTERRUPT
+#define MACH64_RCV_INTERRUPT     MACH_RCV_INTERRUPT
+#define MACH64_RCV_MSG           MACH_RCV_MSG
+#define MACH64_RCV_SYNC_WAIT     MACH_RCV_SYNC_WAIT
+
+#define LIBMACH_OPTIONS          (MACH_SEND_INTERRUPT | MACH_RCV_INTERRUPT)
+#define LIBMACH_OPTIONS64        (MACH64_SEND_INTERRUPT | MACH64_RCV_INTERRUPT)
+
+typedef uint64_t mach_msg_option64_t;
 
 typedef struct {
     /* a mach_msg_header_t* or mach_msg_aux_header_t* */
@@ -35,16 +44,64 @@ typedef struct {
     mach_msg_size_t msgv_rcv_size;
 } mach_msg_vector_t;
 
-extern mach_msg_return_t mach_msg2_internal(void *data, uint64_t option64,
-                                            uint64_t msgh_bits_and_send_size,
-                                            uint64_t msgh_remote_and_local_port,
-                                            uint64_t msgh_voucher_and_id,
-                                            uint64_t desc_count_and_rcv_name,
-                                            uint64_t rcv_size_and_priority, uint64_t timeout);
+extern mach_msg_return_t
+mach_msg2_trap(void *data, mach_msg_option64_t options, uint64_t msgh_bits_and_send_size,
+               uint64_t msgh_remote_and_local_port, uint64_t msgh_voucher_and_id,
+               uint64_t desc_count_and_rcv_name, uint64_t rcv_size_and_priority, uint64_t timeout);
 
-static mach_msg_return_t mach_msg2(void *data, uint64_t option64, mach_msg_header_t header,
-                                   mach_msg_size_t send_size, mach_msg_size_t rcv_size,
-                                   mach_port_t rcv_name, uint64_t timeout, uint32_t priority) {
+static inline mach_msg_option64_t
+mach_msg_options_after_interruption(mach_msg_option64_t option64) {
+    if ((option64 & MACH64_SEND_MSG) && (option64 & MACH64_RCV_MSG)) {
+        /*
+         * If MACH_RCV_SYNC_WAIT was passed for a combined send-receive it must
+         * be cleared for receive-only retries, as the kernel has no way to
+         * discover the destination.
+         */
+        option64 &= ~MACH64_RCV_SYNC_WAIT;
+    }
+    option64 &= ~(LIBMACH_OPTIONS64 | MACH64_SEND_MSG);
+    return option64;
+}
+static mach_msg_return_t my_mach_msg2_internal(void *data, mach_msg_option64_t option64,
+                                               uint64_t msgh_bits_and_send_size,
+                                               uint64_t msgh_remote_and_local_port,
+                                               uint64_t msgh_voucher_and_id,
+                                               uint64_t desc_count_and_rcv_name,
+                                               uint64_t rcv_size_and_priority, uint64_t timeout) {
+    mach_msg_return_t mr;
+
+    mr = mach_msg2_trap(data, option64 & ~LIBMACH_OPTIONS64, msgh_bits_and_send_size,
+                        msgh_remote_and_local_port, msgh_voucher_and_id, desc_count_and_rcv_name,
+                        rcv_size_and_priority, timeout);
+
+    if (mr == MACH_MSG_SUCCESS) {
+        return MACH_MSG_SUCCESS;
+    }
+
+    if ((option64 & MACH64_SEND_INTERRUPT) == 0) {
+        while (mr == MACH_SEND_INTERRUPTED) {
+            mr = mach_msg2_trap(data, option64 & ~LIBMACH_OPTIONS64, msgh_bits_and_send_size,
+                                msgh_remote_and_local_port, msgh_voucher_and_id,
+                                desc_count_and_rcv_name, rcv_size_and_priority, timeout);
+        }
+    }
+
+    if ((option64 & MACH64_RCV_INTERRUPT) == 0) {
+        while (mr == MACH_RCV_INTERRUPTED) {
+            mr = mach_msg2_trap(data, mach_msg_options_after_interruption(option64),
+                                msgh_bits_and_send_size & 0xffffffffull, /* zero send size */
+                                msgh_remote_and_local_port, msgh_voucher_and_id,
+                                desc_count_and_rcv_name, rcv_size_and_priority, timeout);
+        }
+    }
+
+    return mr;
+}
+
+static mach_msg_return_t my_mach_msg2(void *data, mach_msg_option64_t option64,
+                                      mach_msg_header_t header, mach_msg_size_t send_size,
+                                      mach_msg_size_t rcv_size, mach_port_t rcv_name,
+                                      uint64_t timeout, uint32_t priority) {
     mach_msg_base_t *base;
     mach_msg_size_t descriptors;
 
@@ -61,11 +118,12 @@ static mach_msg_return_t mach_msg2(void *data, uint64_t option64, mach_msg_heade
     }
 
 #define MACH_MSG2_SHIFT_ARGS(lo, hi) ((uint64_t)hi << 32 | (uint32_t)lo)
-    return mach_msg2_internal(data, option64, MACH_MSG2_SHIFT_ARGS(header.msgh_bits, send_size),
-                              MACH_MSG2_SHIFT_ARGS(header.msgh_remote_port, header.msgh_local_port),
-                              MACH_MSG2_SHIFT_ARGS(header.msgh_voucher_port, header.msgh_id),
-                              MACH_MSG2_SHIFT_ARGS(descriptors, rcv_name),
-                              MACH_MSG2_SHIFT_ARGS(rcv_size, priority), timeout);
+    return my_mach_msg2_internal(
+        data, option64, MACH_MSG2_SHIFT_ARGS(header.msgh_bits, send_size),
+        MACH_MSG2_SHIFT_ARGS(header.msgh_remote_port, header.msgh_local_port),
+        MACH_MSG2_SHIFT_ARGS(header.msgh_voucher_port, header.msgh_id),
+        MACH_MSG2_SHIFT_ARGS(descriptors, rcv_name), MACH_MSG2_SHIFT_ARGS(rcv_size, priority),
+        timeout);
 #undef MACH_MSG2_SHIFT_ARGS
 }
 
@@ -125,9 +183,9 @@ static void token_thingy(mach_port_t port) {
         .msgh_size        = sizeof(hdr),
     };
 
-    // kr = mach_msg(&hdr, MACH_SEND_MSG, sizeof(hdr), 0, MACH_PORT_NULL, 0, 0);
-    kr = mach_msg2(&hdr, MACH64_SEND_MSG | MACH64_SEND_KOBJECT_CALL, hdr, hdr.msgh_size, 0,
-                   MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
+    // kr = mach_msg(&hdr, MACH_SEND_MSG, hdr.msgh_size, 0, MACH_PORT_NULL, 0, 0);
+    kr = my_mach_msg2(&hdr, MACH64_SEND_MSG | MACH64_SEND_KOBJECT_CALL, hdr, hdr.msgh_size, 0,
+                      MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
     if (kr != KERN_SUCCESS) {
         printf("mach_msg receive failed: 0x%08xu a.k.a '%s'\n", kr, mach_error_string(kr));
         abort();
@@ -146,8 +204,8 @@ static void cfi_test_two_bits_set(void) {
     header.msgh_bits        = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
     header.msgh_size        = sizeof(header);
 
-    kr = mach_msg2(&header, MACH64_SEND_MSG | MACH64_SEND_KOBJECT_CALL, header, header.msgh_size, 0,
-                   MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
+    kr = my_mach_msg2(&header, MACH64_SEND_MSG | MACH64_SEND_KOBJECT_CALL, header, header.msgh_size,
+                      0, MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
     printf("[Crasher cfi_test_two_bits_set]: mach_msg2() returned %d\n", kr);
 }
 
@@ -352,8 +410,8 @@ int main(int argc, char **argv) {
 
     usleep(1000);
 
-    token_thingy(mach_task_self());
-    // token_thingy(child_task_name_port);
+    // token_thingy(mach_task_self());
+    token_thingy(child_task_name_port);
 
     // Prepare to receive the dead-name notification
     struct {
