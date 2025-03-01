@@ -5,10 +5,8 @@
 #include <bsm/audit.h>
 #include <errno.h>
 #include <libproc.h>
-#include <mach/arm/kern_return.h>
 #include <mach/mach.h>
-#include <mach/message.h>
-#include <mach/port.h>
+#include <ptrauth.h>
 #include <signal.h>
 #include <spawn.h>
 #include <stdint.h>
@@ -18,22 +16,43 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define MACH64_MSG_OPTION_NONE   0ull
-#define MACH64_SEND_MSG          MACH_SEND_MSG
-#define MACH64_MSG_VECTOR        0x0000000100000000ull
-#define MACH64_SEND_KOBJECT_CALL 0x0000000200000000ull
-#define MACH64_SEND_MQ_CALL      0x0000000400000000ull
-#define MACH64_SEND_ANY          0x0000000800000000ull
-#define MACH64_SEND_DK_CALL      0x0000001000000000ull
-#define MACH64_SEND_INTERRUPT    MACH_SEND_INTERRUPT
-#define MACH64_RCV_INTERRUPT     MACH_RCV_INTERRUPT
-#define MACH64_RCV_MSG           MACH_RCV_MSG
-#define MACH64_RCV_SYNC_WAIT     MACH_RCV_SYNC_WAIT
+#define MACH64_MSG_OPTION_NONE       0ull
+#define MACH64_SEND_MSG              MACH_SEND_MSG
+#define MACH64_MSG_VECTOR            0x0000000100000000ull
+#define MACH64_SEND_KOBJECT_CALL     0x0000000200000000ull
+#define MACH64_SEND_MQ_CALL          0x0000000400000000ull
+#define MACH64_SEND_ANY              0x0000000800000000ull
+#define MACH64_SEND_DK_CALL          0x0000001000000000ull
+#define MACH64_SEND_INTERRUPT        MACH_SEND_INTERRUPT
+#define MACH64_RCV_INTERRUPT         MACH_RCV_INTERRUPT
+#define MACH64_RCV_MSG               MACH_RCV_MSG
+#define MACH64_RCV_SYNC_WAIT         MACH_RCV_SYNC_WAIT
+#define MACH64_RCV_VOUCHER           MACH_RCV_VOUCHER
 
-#define LIBMACH_OPTIONS          (MACH_SEND_INTERRUPT | MACH_RCV_INTERRUPT)
-#define LIBMACH_OPTIONS64        (MACH64_SEND_INTERRUPT | MACH64_RCV_INTERRUPT)
+#define MACH_MSGV_IDX_MSG            ((uint32_t)0)
+#define MACH_MSGV_IDX_AUX            ((uint32_t)1)
+
+#define LIBMACH_OPTIONS              (MACH_SEND_INTERRUPT | MACH_RCV_INTERRUPT)
+#define LIBMACH_OPTIONS64            (MACH64_SEND_INTERRUPT | MACH64_RCV_INTERRUPT)
+
+#define LIBSYSCALL_MSGV_AUX_MAX_SIZE 128
+
+#define __TSD_MACH_MSG_AUX           123
+
+#define __PTK_LIBDISPATCH_KEY8       28
+#define OS_VOUCHER_TSD_KEY           __PTK_LIBDISPATCH_KEY8
+
+#define _OS_OBJECT_HEADER(isa, ref_cnt, xref_cnt)                       \
+    isa; /* must be pointer-sized and use __ptrauth_objc_isa_pointer */ \
+    int volatile ref_cnt;                                               \
+    int volatile xref_cnt
 
 typedef uint64_t mach_msg_option64_t;
+
+typedef struct {
+    mach_msg_size_t msgdh_size;
+    uint32_t msgdh_reserved; /* For future */
+} mach_msg_aux_header_t;
 
 typedef struct {
     /* a mach_msg_header_t* or mach_msg_aux_header_t* */
@@ -44,13 +63,136 @@ typedef struct {
     mach_msg_size_t msgv_rcv_size;
 } mach_msg_vector_t;
 
+typedef uint32_t _voucher_magic_t;
+typedef uint32_t _voucher_priority_t;
+typedef uint64_t firehose_activity_id_t;
+
+#define VOUCHER_MAGIC_V3 ((_voucher_magic_t)0x0390cefa) // FACE9003
+
+struct voucher_s;
+typedef struct voucher_s *voucher_t;
+typedef struct voucher_s {
+    _OS_OBJECT_HEADER(struct voucher_vtable_s *__ptrauth_objc_isa_pointer os_obj_isa,
+                      os_obj_ref_cnt, os_obj_xref_cnt);
+    struct voucher_hash_entry_s {
+        uintptr_t vhe_next;
+        uintptr_t vhe_prev_ptr;
+    } v_list;
+    mach_voucher_t v_kvoucher, v_ipc_kvoucher; // if equal, only one reference
+    voucher_t v_kvbase;                        // if non-NULL, v_kvoucher is a borrowed reference
+    firehose_activity_id_t v_activity;
+    uint64_t v_activity_creator;
+    firehose_activity_id_t v_parent_activity;
+    unsigned int v_kv_has_importance : 1;
+#if 1
+    size_t v_recipe_extra_offset;
+    mach_voucher_attr_recipe_size_t v_recipe_extra_size;
+#endif
+} voucher_s;
+
+typedef struct voucher_s *voucher_t;
+
+typedef struct _voucher_mach_udata_s {
+    _voucher_magic_t vmu_magic;
+    _voucher_priority_t vmu_priority;
+    uint8_t _vmu_after_priority[0];
+    firehose_activity_id_t vmu_activity;
+    uint64_t vmu_activity_pid;
+    firehose_activity_id_t vmu_parent_activity;
+    uint8_t _vmu_after_activity[0];
+} _voucher_mach_udata_s;
+
+typedef struct _voucher_mach_udata_aux_s {
+    mach_msg_aux_header_t header;
+    _voucher_mach_udata_s udata;
+} _voucher_mach_udata_aux_s;
+
+struct dispatch_tsd {
+    pid_t tid;
+    void *dispatch_queue_key;
+    void *dispatch_frame_key;
+    void *dispatch_cache_key;
+    void *dispatch_context_key;
+    void *dispatch_pthread_root_queue_observer_hooks_key;
+    void *dispatch_basepri_key;
+    void *dispatch_introspection_key;
+    void *dispatch_bcounter_key;
+    void *dispatch_priority_key;
+    void *dispatch_r2k_key;
+    void *dispatch_wlh_key;
+    void *dispatch_voucher_key;
+    void *dispatch_deferred_items_key;
+    void *dispatch_quantum_key;
+    void *dispatch_dsc_key;
+    void *dispatch_enqueue_key;
+    void *dispatch_msgv_aux_key;
+
+    void *os_workgroup_key;
+};
+
+extern _Thread_local struct dispatch_tsd __dispatch_tsd;
+
+#define DISPATCH_MSGV_AUX_MAX_SIZE sizeof(_voucher_mach_udata_aux_s)
+
 extern mach_msg_return_t
 mach_msg2_trap(void *data, mach_msg_option64_t options, uint64_t msgh_bits_and_send_size,
                uint64_t msgh_remote_and_local_port, uint64_t msgh_voucher_and_id,
                uint64_t desc_count_and_rcv_name, uint64_t rcv_size_and_priority, uint64_t timeout);
 
-static inline mach_msg_option64_t
-mach_msg_options_after_interruption(mach_msg_option64_t option64) {
+static __attribute__((const)) void **my_os_tsd_get_base(void) {
+    uintptr_t tsd;
+    __asm__("mrs %0, TPIDRRO_EL0" : "=r"(tsd));
+    return (void **)tsd;
+}
+
+static void *my_os_tsd_get_direct(unsigned long slot) {
+    return my_os_tsd_get_base()[slot];
+}
+
+static int my_os_tsd_set_direct(unsigned long slot, void *val) {
+    my_os_tsd_get_base()[slot] = val;
+    return 0;
+}
+
+static struct dispatch_tsd *my_dispatch_get_tsd_base(void) {
+    OS_COMPILER_CAN_ASSUME(__dispatch_tsd.tid != 0);
+    return &__dispatch_tsd;
+}
+
+#define my_dispatch_thread_getspecific(key) (my_dispatch_get_tsd_base()->key)
+
+static voucher_t my_voucher_get(void) {
+    return my_dispatch_thread_getspecific(dispatch_voucher_key);
+}
+
+static mach_msg_size_t my_voucher_mach_msg_fill_aux(mach_msg_aux_header_t *aux,
+                                                    mach_msg_size_t aux_sz) {
+    voucher_t v = my_voucher_get();
+
+    if (!(v && v->v_activity))
+        return 0;
+    if (aux_sz < DISPATCH_MSGV_AUX_MAX_SIZE)
+        return 0;
+
+    _Static_assert(LIBSYSCALL_MSGV_AUX_MAX_SIZE >= DISPATCH_MSGV_AUX_MAX_SIZE,
+                   "aux buffer size in libsyscall too small");
+    _voucher_mach_udata_aux_s *udata_aux = (_voucher_mach_udata_aux_s *)aux;
+
+    udata_aux->header.msgdh_size     = DISPATCH_MSGV_AUX_MAX_SIZE;
+    udata_aux->header.msgdh_reserved = 0;
+
+    udata_aux->udata = (_voucher_mach_udata_s){
+        .vmu_magic = VOUCHER_MAGIC_V3,
+        /* .vmu_priority is unused */
+        .vmu_activity        = v->v_activity,
+        .vmu_activity_pid    = v->v_activity_creator,
+        .vmu_parent_activity = v->v_parent_activity,
+    };
+
+    return DISPATCH_MSGV_AUX_MAX_SIZE;
+}
+
+static mach_msg_option64_t my_mach_msg_options_after_interruption(mach_msg_option64_t option64) {
     if ((option64 & MACH64_SEND_MSG) && (option64 & MACH64_RCV_MSG)) {
         /*
          * If MACH_RCV_SYNC_WAIT was passed for a combined send-receive it must
@@ -62,6 +204,7 @@ mach_msg_options_after_interruption(mach_msg_option64_t option64) {
     option64 &= ~(LIBMACH_OPTIONS64 | MACH64_SEND_MSG);
     return option64;
 }
+
 static mach_msg_return_t my_mach_msg2_internal(void *data, mach_msg_option64_t option64,
                                                uint64_t msgh_bits_and_send_size,
                                                uint64_t msgh_remote_and_local_port,
@@ -88,7 +231,7 @@ static mach_msg_return_t my_mach_msg2_internal(void *data, mach_msg_option64_t o
 
     if ((option64 & MACH64_RCV_INTERRUPT) == 0) {
         while (mr == MACH_RCV_INTERRUPTED) {
-            mr = mach_msg2_trap(data, mach_msg_options_after_interruption(option64),
+            mr = mach_msg2_trap(data, my_mach_msg_options_after_interruption(option64),
                                 msgh_bits_and_send_size & 0xffffffffull, /* zero send size */
                                 msgh_remote_and_local_port, msgh_voucher_and_id,
                                 desc_count_and_rcv_name, rcv_size_and_priority, timeout);
@@ -125,6 +268,127 @@ static mach_msg_return_t my_mach_msg2(void *data, mach_msg_option64_t option64,
         MACH_MSG2_SHIFT_ARGS(descriptors, rcv_name), MACH_MSG2_SHIFT_ARGS(rcv_size, priority),
         timeout);
 #undef MACH_MSG2_SHIFT_ARGS
+}
+
+static int my_voucher_mach_msg_fill_aux_supported(void) {
+    return 1;
+}
+
+static mach_msg_return_t my_mach_msg_overwrite(mach_msg_header_t *msg, mach_msg_option_t option,
+                                               mach_msg_size_t send_size, mach_msg_size_t rcv_limit,
+                                               mach_port_t rcv_name, mach_msg_timeout_t timeout,
+                                               mach_port_t notify, mach_msg_header_t *rcv_msg,
+                                               __unused mach_msg_size_t rcv_scatter_size) {
+    mach_msg_return_t mr;
+
+    mach_msg_aux_header_t *aux;
+    mach_msg_vector_t vecs[2];
+
+    uint8_t inline_aux_buf[LIBSYSCALL_MSGV_AUX_MAX_SIZE];
+
+    mach_msg_priority_t priority = 0;
+    mach_msg_size_t aux_sz       = 0;
+    mach_msg_option64_t option64 = (mach_msg_option64_t)option;
+
+    aux = (mach_msg_aux_header_t *)inline_aux_buf;
+
+    /*
+     * For the following cases, we have to use vector send/receive; otherwise
+     * we can use scalar mach_msg2() for a slightly better performance due to
+     * fewer copyio operations.
+     *
+     *     1. Attempting to receive voucher.
+     *     2. Caller provides a different receive msg buffer. (scalar mach_msg2()
+     *     does not support mach_msg_overwrite()).
+     *     3. Libdispatch has an aux data to send.
+     */
+
+    /*
+     * voucher_mach_msg_fill_aux_supported() is FALSE if libsyscall is linked against
+     * an old libdispatch (e.g. old Simulator on new system), or if we are building
+     * Libsyscall_static due to weak linking (e.g. dyld).
+     *
+     * Hoist this check to guard the malloc().
+     *
+     * See: _libc_weak_funcptr.c
+     */
+    if (my_voucher_mach_msg_fill_aux_supported() && (option64 & MACH64_RCV_MSG) &&
+        (option64 & MACH64_RCV_VOUCHER)) {
+        option64 |= MACH64_MSG_VECTOR;
+        if (!(aux = my_os_tsd_get_direct(__TSD_MACH_MSG_AUX))) {
+            aux = malloc(LIBSYSCALL_MSGV_AUX_MAX_SIZE);
+            if (aux) {
+                /* will be freed during TSD teardown */
+                my_os_tsd_set_direct(__TSD_MACH_MSG_AUX, aux);
+            } else {
+                /* revert to use on stack buffer */
+                aux = (mach_msg_aux_header_t *)inline_aux_buf;
+                option64 &= ~MACH64_MSG_VECTOR;
+            }
+        }
+    }
+
+    if ((option64 & MACH64_RCV_MSG) && rcv_msg != NULL) {
+        option64 |= MACH64_MSG_VECTOR;
+    }
+
+    if ((option64 & MACH64_SEND_MSG) &&
+        /* this returns 0 for Libsyscall_static due to weak linking */
+        ((aux_sz = my_voucher_mach_msg_fill_aux(aux, LIBSYSCALL_MSGV_AUX_MAX_SIZE)) != 0)) {
+        option64 |= MACH64_MSG_VECTOR;
+    }
+
+    if (option64 & MACH64_MSG_VECTOR) {
+        vecs[MACH_MSGV_IDX_MSG] = (mach_msg_vector_t){
+            .msgv_data      = (mach_vm_address_t)msg,
+            .msgv_rcv_addr  = (mach_vm_address_t)rcv_msg, /* if 0, just use msg as rcv address */
+            .msgv_send_size = send_size,
+            .msgv_rcv_size  = rcv_limit,
+        };
+        vecs[MACH_MSGV_IDX_AUX] = (mach_msg_vector_t){
+            .msgv_data      = (mach_vm_address_t)aux,
+            .msgv_rcv_addr  = 0,
+            .msgv_send_size = aux_sz,
+            .msgv_rcv_size  = LIBSYSCALL_MSGV_AUX_MAX_SIZE,
+        };
+    }
+
+    if (option64 & MACH64_SEND_MSG) {
+        priority = (mach_msg_priority_t)notify;
+    }
+
+    if ((option64 & MACH64_RCV_MSG) && !(option64 & MACH64_SEND_MSG) &&
+        (option64 & MACH64_RCV_SYNC_WAIT)) {
+        msg->msgh_remote_port = notify;
+    }
+
+    if (my_voucher_mach_msg_fill_aux_supported()) {
+        option64 |= MACH64_SEND_MQ_CALL;
+    } else {
+        /*
+         * Special flag for old simulators on new system to skip mach_msg2()
+         * CFI enforcement.
+         */
+        option64 |= MACH64_SEND_ANY;
+        printf("bad, got old simulator case for mach_msg2 skipping\n");
+        abort();
+    }
+
+    if (option64 & MACH64_MSG_VECTOR) {
+        mr = my_mach_msg2(vecs, option64, *msg, 2, 2, rcv_name, timeout, priority);
+    } else {
+        mr = my_mach_msg2(msg, option64, *msg, send_size, rcv_limit, rcv_name, timeout, priority);
+    }
+
+    return mr;
+}
+
+static mach_msg_return_t my_mach_msg(mach_msg_header_t *msg, mach_msg_option_t option,
+                                     mach_msg_size_t send_size, mach_msg_size_t rcv_size,
+                                     mach_port_t rcv_name, mach_msg_timeout_t timeout,
+                                     mach_port_t notify) {
+    return my_mach_msg_overwrite(msg, option, send_size, rcv_size, rcv_name, timeout, notify, NULL,
+                                 0);
 }
 
 static void token_thingy(mach_port_t port) {
