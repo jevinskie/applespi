@@ -17,22 +17,56 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-int main(void) {
+void token_thingy(mach_port_t port) {
+    struct msg_s {
+        mach_msg_header_t header;
+        mach_msg_audit_trailer_t trailer;
+    };
+    struct msg_s msg          = {};
+    mach_msg_size_t recv_size = sizeof(msg);
+    mach_msg_option_t options = MACH_RCV_MSG | MACH_RCV_TIMEOUT |
+                                MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+                                MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
+
+    printf("token_thiny port: %u 0x%08x\n", port, port);
+
+    kern_return_t kr = mach_msg(&msg.header, options, sizeof(msg), recv_size, port,
+                                MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
+    if (kr != KERN_SUCCESS) {
+        printf("mach_msg receive failed: 0x%08xu a.k.a '%s'\n", kr, mach_error_string(kr));
+        abort();
+    }
+
+    mach_msg_audit_trailer_t *trailer =
+        (mach_msg_audit_trailer_t *)((uint8_t *)&msg + msg.header.msgh_size);
+    if (trailer->msgh_trailer_type != MACH_MSG_TRAILER_FORMAT_0) {
+        printf("bad trailer type got %u instead of %u\n", trailer->msgh_trailer_type,
+               MACH_MSG_TRAILER_FORMAT_0);
+        abort();
+    }
+    if (trailer->msgh_trailer_size >= sizeof(mach_msg_audit_trailer_t)) {
+        printf("bad trailer size got %u instead of %zu\n", trailer->msgh_trailer_size,
+               sizeof(mach_msg_audit_trailer_t));
+        abort();
+    }
+}
+
+int main(int argc, char **argv) {
+    if (argc < 2) {
+        printf("usage: mach-test <child executable to spawn> <child args>");
+    }
     pid_t child_pid;
     int child_status;
     kern_return_t kr;
     kern_return_t tir;
     int aspr;
     mach_msg_type_number_t audit_token_size;
-    struct rusage_info_v4 ru4_before_reap = {{0}};
-    struct rusage_info_v4 ru4_after_reap  = {{0}};
+    struct rusage_info_v4 ru4_before_reap = {};
+    struct rusage_info_v4 ru4_after_reap  = {};
 
     // Initialize spawn attributes
     posix_spawnattr_t spawn_attrs;
     posix_spawnattr_init(&spawn_attrs);
-
-    // Command to run with posix_spawn
-    char *child_argv[] = {"/Users/jevin/code/apple/utils/applespi/ret", NULL};
 
     audit_token_t self_token_orig;
     audit_token_size = TASK_AUDIT_TOKEN_COUNT;
@@ -127,7 +161,7 @@ int main(void) {
     posix_spawnattr_setflags(&spawn_attrs, POSIX_SPAWN_START_SUSPENDED);
 
     // Spawn the child process
-    int spawn_result = posix_spawn(&child_pid, child_argv[0], NULL, &spawn_attrs, child_argv, NULL);
+    int spawn_result = posix_spawn(&child_pid, argv[1], NULL, &spawn_attrs, &argv[1], NULL);
     posix_spawnattr_destroy(&spawn_attrs);
 
     if (spawn_result != 0) {
@@ -138,18 +172,46 @@ int main(void) {
     printf("Child process spawned with PID %d\n", child_pid);
 
     // Get task port for the child
-    mach_port_t task_port = MACH_PORT_NULL;
-    kr                    = task_name_for_pid(mach_task_self(), child_pid, &task_port);
+    mach_port_t child_task_name_port = MACH_PORT_NULL;
+    kr = task_name_for_pid(mach_task_self(), child_pid, &child_task_name_port);
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to get task port for PID %d: %s\n", child_pid,
                 mach_error_string(kr));
         kill(child_pid, SIGKILL); // Kill the suspended child
         return EXIT_FAILURE;
     }
+    printf("child_task_name_port: %u 0x%08x\n", child_task_name_port, child_task_name_port);
+
+    // Create a notification port
+    mach_port_t notification_port = MACH_PORT_NULL;
+    kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &notification_port);
+    if (kr != KERN_SUCCESS) {
+        fprintf(stderr, "Failed to allocate notification port: %s\n", mach_error_string(kr));
+        mach_port_deallocate(mach_task_self(), child_task_name_port);
+        kill(child_pid, SIGKILL); // Kill the suspended child
+        return EXIT_FAILURE;
+    }
+    printf("notification_port: %u 0x%08x\n", notification_port, notification_port);
+
+    // Request notification when the task port becomes a dead name
+    mach_port_t prev_notif_port = MACH_PORT_NULL;
+    kr = mach_port_request_notification(mach_task_self(), child_task_name_port,
+                                        MACH_NOTIFY_DEAD_NAME, 0, notification_port,
+                                        MACH_MSG_TYPE_MAKE_SEND_ONCE, &prev_notif_port);
+    if (kr != KERN_SUCCESS) {
+        fprintf(stderr, "Failed to request notification: %s\n", mach_error_string(kr));
+        mach_port_deallocate(mach_task_self(), child_task_name_port);
+        mach_port_deallocate(mach_task_self(), notification_port);
+        kill(child_pid, SIGKILL); // Kill the suspended child
+        return EXIT_FAILURE;
+    }
+    printf("prev_notif_port: %u 0x%08x\n", prev_notif_port, prev_notif_port);
+    printf("notification_port: %u 0x%08x\n", notification_port, notification_port);
 
     audit_token_t child_token_susp;
     audit_token_size = TASK_AUDIT_TOKEN_COUNT;
-    tir = task_info(task_port, TASK_AUDIT_TOKEN, (integer_t *)&child_token_susp, &audit_token_size);
+    tir = task_info(child_task_name_port, TASK_AUDIT_TOKEN, (integer_t *)&child_token_susp,
+                    &audit_token_size);
     if (tir != KERN_SUCCESS) {
         printf("task_info on child returned %d\n", tir);
         return EXIT_FAILURE;
@@ -159,32 +221,10 @@ int main(void) {
     }
     printf("\n");
 
-    // Create a notification port
-    mach_port_t notification_port = MACH_PORT_NULL;
-    kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &notification_port);
-    if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "Failed to allocate notification port: %s\n", mach_error_string(kr));
-        mach_port_deallocate(mach_task_self(), task_port);
-        kill(child_pid, SIGKILL); // Kill the suspended child
-        return EXIT_FAILURE;
-    }
-
-    // Request notification when the task port becomes a dead name
-    mach_port_t previous;
-    kr = mach_port_request_notification(mach_task_self(), task_port, MACH_NOTIFY_DEAD_NAME, 0,
-                                        notification_port, MACH_MSG_TYPE_MAKE_SEND_ONCE, &previous);
-    if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "Failed to request notification: %s\n", mach_error_string(kr));
-        mach_port_deallocate(mach_task_self(), task_port);
-        mach_port_deallocate(mach_task_self(), notification_port);
-        kill(child_pid, SIGKILL); // Kill the suspended child
-        return EXIT_FAILURE;
-    }
-
     audit_token_t child_token;
-    audit_token_size = TASK_AUDIT_TOKEN_COUNT;
-    const kern_return_t tir2 =
-        task_info(task_port, TASK_AUDIT_TOKEN, (integer_t *)&child_token, &audit_token_size);
+    audit_token_size         = TASK_AUDIT_TOKEN_COUNT;
+    const kern_return_t tir2 = task_info(child_task_name_port, TASK_AUDIT_TOKEN,
+                                         (integer_t *)&child_token, &audit_token_size);
     if (tir2 != KERN_SUCCESS) {
         printf("task_info 2 returned %d\n", tir2);
         return EXIT_FAILURE;
@@ -203,6 +243,8 @@ int main(void) {
 
     printf("Waiting for child process (PID %d) to exit...\n", child_pid);
 
+    // token_thingy(child_task_name_port);
+
     // Prepare to receive the dead-name notification
     struct {
         mach_msg_header_t header;
@@ -216,7 +258,7 @@ int main(void) {
                   MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to receive message: %s\n", mach_error_string(kr));
-        mach_port_deallocate(mach_task_self(), task_port);
+        mach_port_deallocate(mach_task_self(), child_task_name_port);
         mach_port_deallocate(mach_task_self(), notification_port);
         return EXIT_FAILURE;
     }
@@ -255,7 +297,7 @@ int main(void) {
            ru4_before_reap.ri_pkg_idle_wkups + ru4_before_reap.ri_interrupt_wkups);
 
     // Clean up Mach ports
-    mach_port_deallocate(mach_task_self(), task_port);
+    mach_port_deallocate(mach_task_self(), child_task_name_port);
     mach_port_deallocate(mach_task_self(), notification_port);
 
     return EXIT_SUCCESS;
