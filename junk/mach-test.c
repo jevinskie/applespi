@@ -144,7 +144,7 @@ static void cfi_test_two_bits_set(void) {
     header.msgh_bits        = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
     header.msgh_size        = sizeof(header);
 
-    kr = mach_msg2(&header, MACH64_SEND_MSG | MACH64_SEND_MQ_CALL, header, header.msgh_size, 0,
+    kr = mach_msg2(&header, MACH64_SEND_MSG | MACH64_SEND_KOBJECT_CALL, header, header.msgh_size, 0,
                    MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
     printf("[Crasher cfi_test_two_bits_set]: mach_msg2() returned %d\n", kr);
 }
