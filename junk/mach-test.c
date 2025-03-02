@@ -755,7 +755,7 @@ static void token_thingy(mach_port_t port) {
         mach_msg_header_t hdr;
         mach_msg_body_t msgh_body;
         mach_msg_port_descriptor_t task_port;
-        mach_msg_security_trailer_t trailer;
+        mach_msg_audit_trailer_t trailer;
     };
     struct msg_token_resp_s msg_token_reply = {};
     memset(&msg_token_reply, 0, sizeof(msg_token_reply));
