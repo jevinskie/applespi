@@ -1,6 +1,3 @@
-#include <mach/kern_return.h>
-#include <mach/port.h>
-#define PRIVATE
 #undef NDEBUG
 #include <assert.h>
 
