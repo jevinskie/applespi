@@ -6,6 +6,7 @@
 #include <libproc.h>
 #include <mach/mach.h>
 #include <mach/mach_traps.h>
+#include <mach/ndr.h>
 #include <ptrauth.h>
 #include <signal.h>
 #include <spawn.h>
@@ -22,7 +23,7 @@
 // x0: =>
 //        (mach_msg_header_t) {
 //            msgh_bits         = 0x00001513
-//                => SEND | RCV | SEND_TIMEOUT | SEND_OVERRIDE | RCV_TIMEOUT | RCV_INTERRUPT |
+//                => SEND | RCV | SEND_TIMEOUT | RCV_TIMEOUT | RCV_INTERRUPT |
 //                RCV_GUARDED_DESC
 //            msgh_size         = 0x00000024 36
 //            msgh_remote_port  = 0x00000e03 3587
@@ -228,7 +229,7 @@ static void dump_header(const mach_msg_header_t *hdr) {
            hdr->msgh_local_port);
     printf("mach_port_name_t         msgh_voucher_port: 0x%08x %u\n", hdr->msgh_voucher_port,
            hdr->msgh_voucher_port);
-    printf("mach_msg_id_t            msgh_id: %d 0x%08x\n", hdr->msgh_id, (uint32_t)hdr->msgh_id);
+    printf("mach_msg_id_t            msgh_id: 0x%08x %d\n", (uint32_t)hdr->msgh_id, hdr->msgh_id);
     fflush(stdout);
 }
 
@@ -578,6 +579,79 @@ static void token_thingy(mach_port_t port) {
     }
 #endif
 
+    task_id_token_t self_task_id_token = MACH_PORT_NULL;
+    kr = task_create_identity_token(mach_task_self(), &self_task_id_token);
+    printf("self_task_id_token task_create_identity_token: 0x%08x %u\n", self_task_id_token,
+           self_task_id_token);
+    if (kr != KERN_SUCCESS) {
+        printf("self_task_id_token task_create_identity_token failed: 0x%08x a.k.a '%s'\n", kr,
+               mach_error_string(kr));
+        abort();
+    }
+
+    mach_port_t token_reply_port = mig_get_reply_port();
+    printf("token_reply_port: 0x%08x %u\n", token_reply_port, token_reply_port);
+    assert(token_reply_port != MACH_PORT_NULL);
+
+    struct msg_token_s {
+        mach_msg_header_t hdr;
+        NDR_record_t ndr;
+        task_flavor_t flavor;
+    };
+    struct msg_token_s msg_token = {};
+    memset(&msg_token, 0, sizeof(msg_token));
+
+    struct msg_token_resp_s {
+        mach_msg_header_t hdr;
+        mach_msg_body_t msgh_body;
+        mach_msg_port_descriptor_t task_port;
+    };
+    struct msg_token_resp_s msg_token_reply = {};
+    memset(&msg_token_reply, 0, sizeof(msg_token_reply));
+
+    union {
+        struct msg_token_s req;
+        struct msg_token_resp_s resp;
+    } msg_token_mega = {};
+    memset(&msg_token_mega, 0, sizeof(msg_token_mega));
+
+    // msg_token.hdr.msgh_bits             = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
+    msg_token.hdr.msgh_bits = MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT |
+                              MACH_RCV_INTERRUPT | MACH_RCV_GUARDED_DESC;
+    msg_token.hdr.msgh_size        = sizeof(msg_token);
+    msg_token.hdr.msgh_id          = 3458;
+    msg_token.hdr.msgh_local_port  = token_reply_port;
+    msg_token.hdr.msgh_remote_port = port;
+
+    // msg_token.trailer.msgh_trailer_type = MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+    //                                 MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
+    //                                 msg_token.trailer.msgh_trailer_size =
+    //                                 sizeof(msg_token.trailer);
+
+    // MACH_RCV_MSG | MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+    // MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
+
+    printf("\n\n\n\n");
+    printf("msg_token before dumps:\n");
+    dump_header(&msg_token.hdr);
+    printf("\n\n");
+    fflush(stdout);
+
+    // kr = my_mach_msg(&msg_token.hdr, MACH_SEND_MSG, msg_token.hdr.msgh_size, 0, MACH_PORT_NULL,
+    // 0, 0);
+    kr = my_mach_msg2(&msg_token.hdr, MACH64_SEND_MSG | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL,
+                      msg_token.hdr, msg_token.hdr.msgh_size, sizeof(msg_token_reply),
+                      msg_token.hdr.msgh_local_port, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
+    printf("msg_token after dumps:\n");
+    dump_header(&msg_token.hdr);
+    printf("\n\n\n\n");
+    fflush(stdout);
+    if (kr != KERN_SUCCESS) {
+        printf("msg_token mach_msg receive failed: 0x%08x a.k.a '%s'\n", kr, mach_error_string(kr));
+        abort();
+    }
+    abort();
+
     mach_port_t new_rcv_port = MACH_PORT_NULL;
     kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &new_rcv_port);
     printf("new_rcv_port mach_port_allocate: 0x%08x %u\n", new_rcv_port, new_rcv_port);
@@ -595,18 +669,18 @@ static void token_thingy(mach_port_t port) {
         abort();
     }
 
-    task_id_token_t self_task_id_token = MACH_PORT_NULL;
-    kr = task_create_identity_token(mach_task_self(), &self_task_id_token);
-    printf("self_task_id_token task_create_identity_token: 0x%08x %u\n", self_task_id_token,
-           self_task_id_token);
+    task_id_token_t self_task_id_token_v2 = MACH_PORT_NULL;
+    kr = task_create_identity_token(mach_task_self(), &self_task_id_token_v2);
+    printf("self_task_id_token_v2 task_create_identity_token: 0x%08x %u\n", self_task_id_token_v2,
+           self_task_id_token_v2);
     if (kr != KERN_SUCCESS) {
-        printf("self_task_id_token task_create_identity_token failed: 0x%08x a.k.a '%s'\n", kr,
+        printf("self_task_id_token_v2 task_create_identity_token failed: 0x%08x a.k.a '%s'\n", kr,
                mach_error_string(kr));
         abort();
     }
 
     mach_port_t self_task_name_port_from_id_token = MACH_PORT_NULL;
-    kr = task_identity_token_get_task_port(self_task_id_token, TASK_FLAVOR_NAME,
+    kr = task_identity_token_get_task_port(self_task_id_token_v2, TASK_FLAVOR_NAME,
                                            &self_task_name_port_from_id_token);
     printf("self_task_name_port_from_id_token task_identity_token_get_task_port: 0x%08x %u\n",
            self_task_name_port_from_id_token, self_task_name_port_from_id_token);
