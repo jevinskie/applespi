@@ -163,6 +163,53 @@ mach_msg2_trap(void *data, mach_msg_option64_t options, uint64_t msgh_bits_and_s
                uint64_t msgh_remote_and_local_port, uint64_t msgh_voucher_and_id,
                uint64_t desc_count_and_rcv_name, uint64_t rcv_size_and_priority, uint64_t timeout);
 
+void dump_header(const mach_msg_header_t *hdr) {
+    printf("mach_msg_header_t        @ %p\n", hdr);
+    printf("mach_msg_bits_t          msgh_bits: %u 0x%08x\n", hdr->msgh_bits, hdr->msgh_bits);
+    printf("mach_msg_size_t          msgh_size: %u 0x%08x\n", hdr->msgh_size, hdr->msgh_size);
+    printf("mach_port_t              msgh_remote_port: %u 0x%08x\n", hdr->msgh_remote_port,
+           hdr->msgh_remote_port);
+    printf("mach_port_t              msgh_local_port: %u 0x%08x\n", hdr->msgh_local_port,
+           hdr->msgh_local_port);
+    printf("mach_port_name_t         msgh_voucher_port: %u 0x%08x\n", hdr->msgh_voucher_port,
+           hdr->msgh_voucher_port);
+    printf("mach_msg_id_t            msgh_id: %d 0x%08x\n", hdr->msgh_id, (uint32_t)hdr->msgh_id);
+    fflush(stdout);
+}
+
+void dump_audit_trailer(const mach_msg_audit_trailer_t *trailer) {
+    printf("mach_msg_audit_trailer_t @ %p\n", trailer);
+    printf("mach_msg_trailer_type_t  msgh_trailer_type: %u 0x%08x\n", trailer->msgh_trailer_type,
+           trailer->msgh_trailer_type);
+    printf("mach_msg_trailer_size_t  msgh_trailer_size: %u 0x%08x\n", trailer->msgh_trailer_size,
+           trailer->msgh_trailer_size);
+    printf("mach_port_seqno_t        msgh_seqno: %u 0x%08x\n", trailer->msgh_seqno,
+           trailer->msgh_seqno);
+    printf("security_token_t         msgh_sender: @ %p\n", &trailer->msgh_sender);
+    printf("security_token_t             msgh_sender[0]: UID %u 0x%08x\n",
+           trailer->msgh_sender.val[0], trailer->msgh_sender.val[0]);
+    printf("security_token_t             msgh_sender[1]: GID %u 0x%08x\n",
+           trailer->msgh_sender.val[1], trailer->msgh_sender.val[1]);
+    printf("audit_token_t            msgh_audit: @ %p\n", &trailer->msgh_audit);
+    printf("audit_token_t                msgh_audit[0]: AuditUID %u 0x%08x\n",
+           trailer->msgh_audit.val[0], trailer->msgh_audit.val[0]);
+    printf("audit_token_t                msgh_audit[1]: EUID %u 0x%08x\n",
+           trailer->msgh_audit.val[1], trailer->msgh_audit.val[1]);
+    printf("audit_token_t                msgh_audit[2]: EGID %u 0x%08x\n",
+           trailer->msgh_audit.val[2], trailer->msgh_audit.val[2]);
+    printf("audit_token_t                msgh_audit[3]: RUID %u 0x%08x\n",
+           trailer->msgh_audit.val[3], trailer->msgh_audit.val[3]);
+    printf("audit_token_t                msgh_audit[4]: RGID %u 0x%08x\n",
+           trailer->msgh_audit.val[4], trailer->msgh_audit.val[4]);
+    printf("audit_token_t                msgh_audit[5]: PID %u 0x%08x\n",
+           trailer->msgh_audit.val[5], trailer->msgh_audit.val[5]);
+    printf("audit_token_t                msgh_audit[6]: AuditSessionID %u 0x%08x\n",
+           trailer->msgh_audit.val[6], trailer->msgh_audit.val[6]);
+    printf("audit_token_t                msgh_audit[7]: PID Version %u 0x%08x\n",
+           trailer->msgh_audit.val[7], trailer->msgh_audit.val[7]);
+    fflush(stdout);
+}
+
 static __attribute__((const)) void **my_os_tsd_get_base(void) {
     uintptr_t tsd;
     __asm__("mrs %0, TPIDRRO_EL0" : "=r"(tsd));
@@ -498,8 +545,8 @@ static void token_thingy(mach_port_t port) {
         mach_msg_header_t hdr;
         mach_msg_audit_trailer_t trailer;
     };
-    struct msg_s msg              = {};
-    msg.hdr.msgh_bits             = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
+    struct msg_s msg = {};
+    // msg.hdr.msgh_bits             = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
     msg.hdr.msgh_size             = sizeof(msg.hdr);
     msg.hdr.msgh_id               = 243243;
     msg.hdr.msgh_local_port       = new_rcv_port;
@@ -511,11 +558,24 @@ static void token_thingy(mach_port_t port) {
     // MACH_RCV_MSG | MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
     // MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
 
+    printf("\n\n\n\n");
+    printf("before dumps:\n");
+    dump_header(&msg.hdr);
+    dump_audit_trailer(&msg.trailer);
+    printf("\n\n");
+    fflush(stdout);
+
     // kr = my_mach_msg(&msg.hdr, MACH_SEND_MSG, msg.hdr.msgh_size, 0, MACH_PORT_NULL, 0, 0);
     kr = my_mach_msg2(
-        &msg.hdr, MACH64_RCV_MSG | MACH_SEND_TIMEOUT | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL,
-        msg.hdr, msg.hdr.msgh_size, msg.trailer.msgh_trailer_size, msg.hdr.msgh_local_port, 0,
+        &msg.hdr, MACH64_RCV_MSG | MACH64_RCV_TIMEOUT | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL,
+        msg.hdr, msg.hdr.msgh_size, msg.trailer.msgh_trailer_size, msg.hdr.msgh_local_port, 1000,
         MACH_MSG_PRIORITY_UNSPECIFIED);
+    printf("after dumps:\n");
+    dump_header(&msg.hdr);
+    dump_audit_trailer(&msg.trailer);
+    printf("\n\n\n\n");
+
+    fflush(stdout);
     if (kr != KERN_SUCCESS) {
         printf("mach_msg receive failed: 0x%08x a.k.a '%s'\n", kr, mach_error_string(kr));
         abort();
