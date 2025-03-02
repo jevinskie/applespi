@@ -1,3 +1,4 @@
+#include <mach/kern_return.h>
 #include <mach/port.h>
 #define PRIVATE
 #undef NDEBUG
@@ -19,11 +20,14 @@
 
 #define MACH64_MSG_OPTION_NONE       0ull
 #define MACH64_SEND_MSG              MACH_SEND_MSG
+#define MACH64_RCV_MSG               MACH_RCV_MSG
 #define MACH64_MSG_VECTOR            0x0000000100000000ull
 #define MACH64_SEND_KOBJECT_CALL     0x0000000200000000ull
 #define MACH64_SEND_MQ_CALL          0x0000000400000000ull
 #define MACH64_SEND_ANY              0x0000000800000000ull
 #define MACH64_SEND_DK_CALL          0x0000001000000000ull
+#define MACH64_PEEK_MSG              0x4000000000000000ull
+#define MACH64_MACH_MSG2             0x8000000000000000ull
 #define MACH64_SEND_INTERRUPT        MACH_SEND_INTERRUPT
 #define MACH64_RCV_INTERRUPT         MACH_RCV_INTERRUPT
 #define MACH64_RCV_MSG               MACH_RCV_MSG
@@ -448,7 +452,7 @@ static void token_thingy(mach_port_t port) {
         mach_msg_overwrite(&msg.header, options, sizeof(msg.header), 0, MACH_PORT_NULL,
                            MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL, NULL, 0);
     if (kr != KERN_SUCCESS) {
-        printf("mach_msg receive failed: 0x%08xu a.k.a '%s'\n", kr, mach_error_string(kr));
+        printf("mach_msg receive failed: 0x%08x a.k.a '%s'\n", kr, mach_error_string(kr));
         abort();
     }
 
@@ -465,24 +469,46 @@ static void token_thingy(mach_port_t port) {
         abort();
     }
 #endif
+
+    mach_port_t new_rcv_port = MACH_PORT_NULL;
+    kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &new_rcv_port);
+    printf("new_rcv_port: %u 0x%08x\n", new_rcv_port, new_rcv_port);
+    if (kr != KERN_SUCCESS) {
+        printf("new_rcv_port mach_port_allocate failed: 0x%08x a.k.a '%s'\n", kr,
+               mach_error_string(kr));
+        abort();
+    }
+
+    kr = mach_port_insert_right(mach_task_self(), new_rcv_port, new_rcv_port,
+                                MACH_MSG_TYPE_MAKE_SEND);
+    if (kr != KERN_SUCCESS) {
+        printf("new_rcv_port mach_port_insert_right failed: 0x%08x a.k.a '%s'\n", kr,
+               mach_error_string(kr));
+        abort();
+    }
+
     struct msg_s {
         mach_msg_header_t hdr;
-        mach_msg_body_t body;
-        mach_msg_port_descriptor_t port;
         mach_msg_audit_trailer_t trailer;
     };
-    struct msg_s msg         = {};
-    msg.hdr.msgh_bits        = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
-    msg.hdr.msgh_size        = sizeof(msg.hdr);
-    msg.hdr.msgh_id          = 243243;
-    msg.hdr.msgh_local_port  = MACH_PORT_NULL;
-    msg.hdr.msgh_remote_port = port;
+    struct msg_s msg              = {};
+    msg.hdr.msgh_bits             = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
+    msg.hdr.msgh_size             = sizeof(msg.hdr);
+    msg.hdr.msgh_id               = 243243;
+    msg.hdr.msgh_local_port       = new_rcv_port;
+    msg.hdr.msgh_remote_port      = port;
+    msg.trailer.msgh_trailer_type = MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+                                    MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
+    msg.trailer.msgh_trailer_size = sizeof(msg.trailer);
+
+    // MACH_RCV_MSG | MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+    // MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
 
     // kr = my_mach_msg(&msg.hdr, MACH_SEND_MSG, msg.hdr.msgh_size, 0, MACH_PORT_NULL, 0, 0);
-    kr = my_mach_msg2(&msg.hdr, MACH64_SEND_MSG | MACH64_SEND_KOBJECT_CALL, msg.hdr,
+    kr = my_mach_msg2(&msg.hdr, MACH64_RCV_MSG | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL, msg.hdr,
                       msg.hdr.msgh_size, 0, MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
     if (kr != KERN_SUCCESS) {
-        printf("mach_msg receive failed: 0x%08xu a.k.a '%s'\n", kr, mach_error_string(kr));
+        printf("mach_msg receive failed: 0x%08x a.k.a '%s'\n", kr, mach_error_string(kr));
         abort();
     }
 }
