@@ -803,7 +803,7 @@ static void token_thingy(mach_port_t port) {
     kr = my_mach_msg2(&msg_token_mega.req.hdr,
                       MACH64_SEND_MSG | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL |
                           MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
-                          MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_SENDER),
+                          MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT),
                       msg_token_mega.req.hdr, msg_token_mega.req.hdr.msgh_size,
                       sizeof(msg_token_mega.resp), msg_token_mega.req.hdr.msgh_local_port, 0,
                       MACH_MSG_PRIORITY_UNSPECIFIED);
