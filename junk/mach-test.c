@@ -674,8 +674,8 @@ static void token_thingy(mach_port_t port) {
     // 0, 0);
     kr = my_mach_msg2(
         &msg_token_mega.req.hdr, MACH64_SEND_MSG | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL,
-        msg_token_mega.req.hdr, msg_token_mega.req.hdr.msgh_size, sizeof(msg_token_mega.resp),
-        msg_token.hdr.msgh_local_port, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
+        msg_token_mega.req.hdr, msg_token_mega.req.hdr.msgh_size, sizeof(msg_token_mega.resp) + 8,
+        msg_token_mega.req.hdr.msgh_local_port, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
     printf("msg_token after dumps:\n");
     dump_header(&msg_token_mega.resp.hdr);
     printf("\n\n\n\n");
