@@ -812,7 +812,7 @@ static void token_thingy(mach_port_t port) {
     dump_msg_body(&msg_token_mega.resp.msgh_body);
     // dump_msg_port_desc(&msg_token_mega.resp.task_port);
     printf("dump_msg_trailer(&msg_token_mega.resp.trailer):\n");
-    dump_msg_trailer(&msg_token_mega.resp.trailer);
+    dump_msg_trailer((mach_msg_trailer_t *)&msg_token_mega.resp.trailer);
     printf("dump_msg_trailer((mach_msg_trailer_t *)&msg_token_mega.resp.task_port):\n");
     dump_msg_trailer((mach_msg_trailer_t *)&msg_token_mega.resp.task_port);
     // printf("dump_msg_security_trailer(&msg_token_mega.resp.trailer):\n");
@@ -824,10 +824,10 @@ static void token_thingy(mach_port_t port) {
     dump_msg_audit_trailer(&msg_token_mega.resp.trailer);
     printf("dump_msg_audit_trailer((mach_msg_audit_trailer_t *)&msg_token_mega.resp.task_port):\n");
     dump_msg_audit_trailer((mach_msg_audit_trailer_t *)&msg_token_mega.resp.task_port);
-    uint32_t *ptval =
-        (uint32_t *)((uintptr_t)&msg_token_mega.resp.task_port + sizeof(mach_msg_trailer_t));
+    uint32_t *ptval = (uint32_t *)((uintptr_t)&msg_token_mega.resp +
+                                   round_msg(msg_token_mega.resp.hdr.msgh_size));
     printf("trailer: @ %p\n", ptval);
-    for (uint32_t i = 0; i < msg_token_mega.resp.trailer.msgh_trailer_size + 3; ++i) {
+    for (uint32_t i = 0; i < msg_token_mega.resp.trailer.msgh_trailer_size + 32; ++i) {
         printf("trailer[%u]: 0x%08x %u\n", i, ptval[i], ptval[i]);
     }
 
