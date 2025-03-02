@@ -1,3 +1,4 @@
+#include <mach/task_special_ports.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -332,6 +333,15 @@ static mach_msg_return_t my_mach_msg2_internal(void *data, mach_msg_option64_t o
                                                uint64_t rcv_size_and_priority, uint64_t timeout) {
     mach_msg_return_t mr;
 
+    printf("mach_msg2_trap_i0 data: %p options: 0x%016llx\n", data, option64 & ~LIBMACH_OPTIONS64);
+    printf("mach_msg2_trap_i0 msgh_bits_and_send_size: 0x%016llx msgh_remote_and_local_port: "
+           "0x%016llx\n",
+           msgh_bits_and_send_size, msgh_remote_and_local_port);
+    printf("mach_msg2_trap_i0 msgh_voucher_and_id: 0x%016llx desc_count_and_rcv_name: "
+           "0x%016llx\n",
+           msgh_voucher_and_id, desc_count_and_rcv_name);
+    printf("mach_msg2_trap_i1 rcv_size_and_priority: 0x%016llx timeout: 0x%016llx\n",
+           rcv_size_and_priority, timeout);
     mr = mach_msg2_trap(data, option64 & ~LIBMACH_OPTIONS64, msgh_bits_and_send_size,
                         msgh_remote_and_local_port, msgh_voucher_and_id, desc_count_and_rcv_name,
                         rcv_size_and_priority, timeout);
@@ -342,6 +352,16 @@ static mach_msg_return_t my_mach_msg2_internal(void *data, mach_msg_option64_t o
 
     if ((option64 & MACH64_SEND_INTERRUPT) == 0) {
         while (mr == MACH_SEND_INTERRUPTED) {
+            printf("mach_msg2_trap_i1 data: %p options: 0x%016llx\n", data,
+                   option64 & ~LIBMACH_OPTIONS64);
+            printf("mach_msg2_trap_i1 msgh_bits_and_send_size: 0x%016llx "
+                   "msgh_remote_and_local_port: 0x%016llx\n",
+                   msgh_bits_and_send_size, msgh_remote_and_local_port);
+            printf("mach_msg2_trap_i1 msgh_voucher_and_id: 0x%016llx desc_count_and_rcv_name: "
+                   "0x%016llx\n",
+                   msgh_voucher_and_id, desc_count_and_rcv_name);
+            printf("mach_msg2_trap_i1 rcv_size_and_priority: 0x%016llx timeout: 0x%016llx\n",
+                   rcv_size_and_priority, timeout);
             mr = mach_msg2_trap(data, option64 & ~LIBMACH_OPTIONS64, msgh_bits_and_send_size,
                                 msgh_remote_and_local_port, msgh_voucher_and_id,
                                 desc_count_and_rcv_name, rcv_size_and_priority, timeout);
@@ -350,6 +370,16 @@ static mach_msg_return_t my_mach_msg2_internal(void *data, mach_msg_option64_t o
 
     if ((option64 & MACH64_RCV_INTERRUPT) == 0) {
         while (mr == MACH_RCV_INTERRUPTED) {
+            printf("mach_msg2_trap_i2 data: %p options: 0x%016llx\n", data,
+                   my_mach_msg_options_after_interruption(option64));
+            printf("mach_msg2_trap_i2 msgh_bits_and_send_size: 0x%016llx "
+                   "msgh_remote_and_local_port: 0x%016llx\n",
+                   msgh_bits_and_send_size & 0xffffffffull, msgh_remote_and_local_port);
+            printf("mach_msg2_trap_i2 msgh_voucher_and_id: 0x%016llx desc_count_and_rcv_name: "
+                   "0x%016llx\n",
+                   msgh_voucher_and_id, desc_count_and_rcv_name);
+            printf("mach_msg2_trap_i2 rcv_size_and_priority: 0x%016llx timeout: 0x%016llx\n",
+                   rcv_size_and_priority, timeout);
             mr = mach_msg2_trap(data, my_mach_msg_options_after_interruption(option64),
                                 msgh_bits_and_send_size & 0xffffffffull, /* zero send size */
                                 msgh_remote_and_local_port, msgh_voucher_and_id,
@@ -623,6 +653,8 @@ static void token_thingy(mach_port_t port) {
     msg_token_mega.req.hdr.msgh_id          = 3458;
     msg_token_mega.req.hdr.msgh_local_port  = token_reply_port;
     msg_token_mega.req.hdr.msgh_remote_port = port;
+    msg_token_mega.req.ndr.int_rep          = '\x01';
+    msg_token_mega.req.flavor               = TASK_FLAVOR_NAME;
 
     // msg_token.trailer.msgh_trailer_type = MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
     //                                 MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
@@ -652,7 +684,7 @@ static void token_thingy(mach_port_t port) {
         printf("msg_token mach_msg receive failed: 0x%08x a.k.a '%s'\n", kr, mach_error_string(kr));
         abort();
     }
-    abort();
+    // abort();
 
     mach_port_t new_rcv_port = MACH_PORT_NULL;
     kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &new_rcv_port);
