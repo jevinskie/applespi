@@ -1,4 +1,3 @@
-#include <mach/task_special_ports.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -8,6 +7,7 @@
 #include <mach/mach.h>
 #include <mach/mach_traps.h>
 #include <mach/ndr.h>
+#include <mach/task_special_ports.h>
 #include <ptrauth.h>
 #include <signal.h>
 #include <spawn.h>
@@ -267,6 +267,18 @@ typedef struct {
 #ifdef __MigPackStructs
 #pragma pack(pop)
 #endif
+
+typedef struct {
+    mach_msg_header_t Head;
+    NDR_record_t NDR;
+    task_flavor_t flavor;
+    mach_msg_trailer_t trailer;
+} titgtp_req_trailer __attribute__((unused));
+
+titgtp_req titgtp_req_dummy;
+titgtp_resp titgtp_resp_dummy;
+titgtp_req_trailer titgtp_req_trailer_dummy;
+mach_msg_vector_t mach_msg_vector_dummy;
 
 static void dump_header(const mach_msg_header_t *hdr) {
     printf("mach_msg_header_t        @ %p\n", hdr);
@@ -843,6 +855,8 @@ int main(int argc, char **argv) {
 
     printf("sizeof(titgtp_req): %zu\n", sizeof(titgtp_req));
     printf("sizeof(titgtp_resp): %zu\n", sizeof(titgtp_resp));
+    printf("sizeof(titgtp_req_trailer): %zu\n", sizeof(titgtp_req_trailer));
+    printf("sizeof(mach_msg_vector_t): %zu\n", sizeof(mach_msg_vector_t));
 
     printf("mach_task_self: 0x%08x %u\n", mach_task_self(), mach_task_self());
 
