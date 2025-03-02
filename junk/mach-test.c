@@ -392,7 +392,7 @@ static mach_msg_return_t my_mach_msg_overwrite(mach_msg_header_t *msg, mach_msg_
         option64 |= MACH64_SEND_ANY;
         printf("bad, got old simulator case for mach_msg2 skipping\n");
         fflush(stdout);
-        abort();
+        // abort();
     }
 
     if (option64 & MACH64_MSG_VECTOR) {
@@ -472,7 +472,7 @@ static void token_thingy(mach_port_t port) {
         .msgh_size        = sizeof(hdr),
     };
 
-    // kr = my_mach_msg(&hdr, MACH_SEND_MSG, hdr.msgh_size, 0, MACH_PORT_NULL, 0, 0);
+    kr = my_mach_msg(&hdr, MACH_SEND_MSG, hdr.msgh_size, 0, MACH_PORT_NULL, 0, 0);
     kr = my_mach_msg2(&hdr, MACH64_SEND_MSG | MACH64_SEND_KOBJECT_CALL, hdr, hdr.msgh_size, 0,
                       MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
     if (kr != KERN_SUCCESS) {
