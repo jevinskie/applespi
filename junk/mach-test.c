@@ -43,6 +43,7 @@
 // x0: =>
 //            (mach_msg_header_t) {
 //                msgh_bits = 0x80001200
+//                    => MSG_STRICT_REPLY | RCV_GUARDED_DESC | COMPLEX
 //                msgh_size = 0x00000028 40
 //                msgh_remote_port = 0x00000000
 //                msgh_local_port = 0x00000707 1799
@@ -87,6 +88,8 @@
 #define MACH64_RCV_SYNC_PEEK         MACH_RCV_SYNC_PEEK      // 0x00008000
 #define MACH64_SEND_TRAILER          MACH_SEND_TRAILER       // 0x00020000
 #define MACH64_SEND_SYNC_OVERRIDE    MACH_SEND_SYNC_OVERRIDE // 0x00100000
+//                                   MACH_MSGH_BITS_COMPLEX     0x80000000
+
 #define MACH64_MSG_VECTOR            0x0000000100000000ull
 #define MACH64_SEND_KOBJECT_CALL     0x0000000200000000ull
 #define MACH64_SEND_MQ_CALL          0x0000000400000000ull
