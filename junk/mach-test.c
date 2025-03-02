@@ -1,3 +1,4 @@
+#include <mach/port.h>
 #define PRIVATE
 #undef NDEBUG
 #include <assert.h>
@@ -464,17 +465,22 @@ static void token_thingy(mach_port_t port) {
         abort();
     }
 #endif
-    mach_msg_header_t hdr = {
-        .msgh_local_port  = MACH_PORT_NULL,
-        .msgh_remote_port = port,
-        .msgh_bits        = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0),
-        .msgh_id          = 243243,
-        .msgh_size        = sizeof(hdr),
+    struct msg_s {
+        mach_msg_header_t hdr;
+        mach_msg_body_t body;
+        mach_msg_port_descriptor_t port;
+        mach_msg_audit_trailer_t trailer;
     };
+    struct msg_s msg         = {};
+    msg.hdr.msgh_bits        = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
+    msg.hdr.msgh_size        = sizeof(msg.hdr);
+    msg.hdr.msgh_id          = 243243;
+    msg.hdr.msgh_local_port  = MACH_PORT_NULL;
+    msg.hdr.msgh_remote_port = port;
 
-    kr = my_mach_msg(&hdr, MACH_SEND_MSG, hdr.msgh_size, 0, MACH_PORT_NULL, 0, 0);
-    kr = my_mach_msg2(&hdr, MACH64_SEND_MSG | MACH64_SEND_KOBJECT_CALL, hdr, hdr.msgh_size, 0,
-                      MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
+    // kr = my_mach_msg(&msg.hdr, MACH_SEND_MSG, msg.hdr.msgh_size, 0, MACH_PORT_NULL, 0, 0);
+    kr = my_mach_msg2(&msg.hdr, MACH64_SEND_MSG | MACH64_SEND_KOBJECT_CALL, msg.hdr,
+                      msg.hdr.msgh_size, 0, MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
     if (kr != KERN_SUCCESS) {
         printf("mach_msg receive failed: 0x%08xu a.k.a '%s'\n", kr, mach_error_string(kr));
         abort();
