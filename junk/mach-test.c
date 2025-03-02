@@ -254,12 +254,18 @@ static mach_msg_return_t my_mach_msg2(void *data, mach_msg_option64_t option64,
     mach_msg_size_t descriptors;
 
     if (option64 & MACH64_MSG_VECTOR) {
+        printf("my_mach_msg2 vector style\n");
+        fflush(stdout);
         base = (mach_msg_base_t *)((mach_msg_vector_t *)data)->msgv_data;
     } else {
+        printf("my_mach_msg2 NON-vector style\n");
+        fflush(stdout);
         base = (mach_msg_base_t *)data;
     }
 
     if ((option64 & MACH64_SEND_MSG) && (base->header.msgh_bits & MACH_MSGH_BITS_COMPLEX)) {
+        printf("my_mach_msg2 sending complex\n");
+        fflush(stdout);
         descriptors = base->body.msgh_descriptor_count;
     } else {
         descriptors = 0;
@@ -321,6 +327,8 @@ static mach_msg_return_t my_mach_msg_overwrite(mach_msg_header_t *msg, mach_msg_
         (option64 & MACH64_RCV_VOUCHER)) {
         option64 |= MACH64_MSG_VECTOR;
         if (!(aux = my_os_tsd_get_direct(__TSD_MACH_MSG_AUX))) {
+            printf("mallocing LIBSYSCALL_MSGV_AUX_MAX_SIZE\n");
+            fflush(stdout);
             aux = malloc(LIBSYSCALL_MSGV_AUX_MAX_SIZE);
             if (aux) {
                 /* will be freed during TSD teardown */
@@ -334,12 +342,16 @@ static mach_msg_return_t my_mach_msg_overwrite(mach_msg_header_t *msg, mach_msg_
     }
 
     if ((option64 & MACH64_RCV_MSG) && rcv_msg != NULL) {
+        printf("setting MACH64_MSG_VECTOR option because we have rcv msg\n");
+        fflush(stdout);
         option64 |= MACH64_MSG_VECTOR;
     }
 
     if ((option64 & MACH64_SEND_MSG) &&
         /* this returns 0 for Libsyscall_static due to weak linking */
         ((aux_sz = my_voucher_mach_msg_fill_aux(aux, LIBSYSCALL_MSGV_AUX_MAX_SIZE)) != 0)) {
+        printf("setting MACH64_MSG_VECTOR option because we have snd msg aux_sz: %u\n", aux_sz);
+        fflush(stdout);
         option64 |= MACH64_MSG_VECTOR;
     }
 
@@ -368,6 +380,9 @@ static mach_msg_return_t my_mach_msg_overwrite(mach_msg_header_t *msg, mach_msg_
     }
 
     if (my_voucher_mach_msg_fill_aux_supported()) {
+        printf("setting MACH64_SEND_MQ_CALL option because "
+               "my_voucher_mach_msg_fill_aux_supported() is true\n");
+        fflush(stdout);
         option64 |= MACH64_SEND_MQ_CALL;
     } else {
         /*
@@ -376,12 +391,17 @@ static mach_msg_return_t my_mach_msg_overwrite(mach_msg_header_t *msg, mach_msg_
          */
         option64 |= MACH64_SEND_ANY;
         printf("bad, got old simulator case for mach_msg2 skipping\n");
+        fflush(stdout);
         abort();
     }
 
     if (option64 & MACH64_MSG_VECTOR) {
+        printf("setting mach_msg2 vector style\n");
+        fflush(stdout);
         mr = my_mach_msg2(vecs, option64, *msg, 2, 2, rcv_name, timeout, priority);
     } else {
+        printf("setting mach_msg2 NON-vector style\n");
+        fflush(stdout);
         mr = my_mach_msg2(msg, option64, *msg, send_size, rcv_limit, rcv_name, timeout, priority);
     }
 
