@@ -1,3 +1,4 @@
+#include <mach/message.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -323,6 +324,64 @@ static void dump_audit_trailer(const mach_msg_audit_trailer_t *trailer) {
            trailer->msgh_audit.val[6], trailer->msgh_audit.val[6]);
     printf("audit_token_t                msgh_audit[7]: PID Version 0x%08x %u\n",
            trailer->msgh_audit.val[7], trailer->msgh_audit.val[7]);
+    fflush(stdout);
+}
+
+static void dump_ndr_record(const NDR_record_t *ndr) {
+    printf("NDR_record @ %p\n", ndr);
+    printf("    mig_vers: %u\n", ndr->mig_vers);
+    printf("    if_vers: %u\n", ndr->if_vers);
+    printf("    reserved1: %u\n", ndr->reserved1);
+    printf("    mig_encoding: %u\n", ndr->mig_encoding);
+    printf("    int_rep: %u\n", ndr->int_rep);
+    printf("    char_rep: %u\n", ndr->char_rep);
+    printf("    float_rep: %u\n", ndr->float_rep);
+    printf("    reserved2: %u\n", ndr->reserved2);
+    fflush(stdout);
+}
+
+static void dump_msg_body(const mach_msg_body_t *body) {
+    printf("mach_msg_body_t @ %p\n", body);
+    printf("    msgh_descriptor_count: %u\n", body->msgh_descriptor_count);
+    fflush(stdout);
+}
+
+static void dump_msg_port_desc(const mach_msg_port_descriptor_t *desc) {
+    printf("mach_msg_port_descriptor_t @ %p\n", desc);
+    printf("    name: 0x%08x %u\n", desc->name, desc->name);
+    printf("    pad1: %u\n", desc->pad1);
+    printf("    pad2: %u\n", desc->pad2);
+    printf("    disposition: %u\n", desc->disposition);
+    printf("    type: %u\n", desc->type);
+    fflush(stdout);
+}
+
+static void dump_task_flavor(const task_flavor_t flavor) {
+    assert(flavor < 4);
+    printf("task_flavor: %s\n", (const char *[]){"control", "read", "inspect", "name"}[flavor]);
+    fflush(stdout);
+}
+
+static void dump_msg_trailer(const mach_msg_trailer_t *trailer) {
+    printf("mach_msg_trailer_t @ %p\n", trailer);
+    printf("    msgh_trailer_size: 0x%08x %u\n", trailer->msgh_trailer_size,
+           trailer->msgh_trailer_size);
+    printf("    msgh_trailer_type: 0x%08x %u\n", trailer->msgh_trailer_type,
+           trailer->msgh_trailer_type);
+    fflush(stdout);
+}
+
+static void dump_msg_security_trailer(const mach_msg_security_trailer_t *trailer) {
+    printf("mach_msg_security_trailer_t @ %p\n", trailer);
+    printf("    msgh_trailer_size: 0x%08x %u\n", trailer->msgh_trailer_size,
+           trailer->msgh_trailer_size);
+    printf("    msgh_trailer_type: 0x%08x %u\n", trailer->msgh_trailer_type,
+           trailer->msgh_trailer_type);
+    printf("    msgh_seqno: 0x%08x %u\n", trailer->msgh_seqno, trailer->msgh_seqno);
+    printf("    msgh_sender[0]: 0x%08x %u\n", trailer->msgh_sender.val[0],
+           trailer->msgh_sender.val[0]);
+    printf("    msgh_sender[1]: 0x%08x %u\n", trailer->msgh_sender.val[1],
+           trailer->msgh_sender.val[1]);
     fflush(stdout);
 }
 
@@ -695,7 +754,7 @@ static void token_thingy(mach_port_t port) {
         mach_msg_header_t hdr;
         mach_msg_body_t msgh_body;
         mach_msg_port_descriptor_t task_port;
-        mach_msg_trailer_t trailer;
+        mach_msg_security_trailer_t trailer;
     };
     struct msg_token_resp_s msg_token_reply = {};
     memset(&msg_token_reply, 0, sizeof(msg_token_reply));
@@ -711,9 +770,10 @@ static void token_thingy(mach_port_t port) {
     fflush(stdout);
 
     // msg_token.hdr.msgh_bits             = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
-    msg_token_mega.req.hdr.msgh_bits = MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT |
-                                       MACH_RCV_TIMEOUT | MACH_RCV_INTERRUPT |
-                                       MACH_RCV_GUARDED_DESC;
+    msg_token_mega.req.hdr.msgh_bits =
+        MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT | MACH_RCV_INTERRUPT |
+        MACH_RCV_GUARDED_DESC | MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+        MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_SENDER);
     msg_token_mega.req.hdr.msgh_size        = sizeof(msg_token_mega.req);
     msg_token_mega.req.hdr.msgh_id          = 3458;
     msg_token_mega.req.hdr.msgh_local_port  = token_reply_port;
@@ -732,17 +792,26 @@ static void token_thingy(mach_port_t port) {
     printf("\n\n\n\n");
     printf("msg_token before dumps:\n");
     dump_header(&msg_token_mega.req.hdr);
+    // dump_ndr_record(&msg_token_mega.req.ndr);
+    dump_task_flavor(msg_token_mega.req.flavor);
     printf("\n\n");
     fflush(stdout);
 
     // kr = my_mach_msg(&msg_token.hdr, MACH_SEND_MSG, msg_token.hdr.msgh_size, 0, MACH_PORT_NULL,
     // 0, 0);
-    kr = my_mach_msg2(
-        &msg_token_mega.req.hdr, MACH64_SEND_MSG | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL,
-        msg_token_mega.req.hdr, msg_token_mega.req.hdr.msgh_size, sizeof(msg_token_mega.resp),
-        msg_token_mega.req.hdr.msgh_local_port, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
+    kr = my_mach_msg2(&msg_token_mega.req.hdr,
+                      MACH64_SEND_MSG | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL |
+                          MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+                          MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_SENDER),
+                      msg_token_mega.req.hdr, msg_token_mega.req.hdr.msgh_size,
+                      sizeof(msg_token_mega.resp), msg_token_mega.req.hdr.msgh_local_port, 0,
+                      MACH_MSG_PRIORITY_UNSPECIFIED);
     printf("msg_token after dumps:\n");
     dump_header(&msg_token_mega.resp.hdr);
+    dump_msg_body(&msg_token_mega.resp.msgh_body);
+    dump_msg_port_desc(&msg_token_mega.resp.task_port);
+    // dump_msg_trailer(&msg_token_mega.resp.trailer);
+    dump_msg_security_trailer(&msg_token_mega.resp.trailer);
     printf("\n\n\n\n");
     fflush(stdout);
     if (kr != KERN_SUCCESS) {
@@ -751,6 +820,7 @@ static void token_thingy(mach_port_t port) {
     }
     // abort();
 
+#if 0
     mach_port_t new_rcv_port = MACH_PORT_NULL;
     kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &new_rcv_port);
     printf("new_rcv_port mach_port_allocate: 0x%08x %u\n", new_rcv_port, new_rcv_port);
@@ -830,6 +900,7 @@ static void token_thingy(mach_port_t port) {
         printf("mach_msg receive failed: 0x%08x a.k.a '%s'\n", kr, mach_error_string(kr));
         abort();
     }
+#endif
 }
 
 static void cfi_test_two_bits_set(void) {
@@ -1061,17 +1132,25 @@ int main(int argc, char **argv) {
     printf("child_asid: 0x%08x %u\n", child_asid, child_asid);
 #endif
 
+    printf("token_thingy(self_name_port_main) run 0\n");
+    token_thingy(self_name_port_main);
+    printf("token_thingy(self_name_port_main) run 1\n");
+    token_thingy(self_name_port_main);
+    printf("token_thingy(self_name_port_main) run 1 - DONE\n");
+
     // Now allow the child to continue
     printf("Resuming child process...\n");
+    fflush(stdout);
     kill(child_pid, SIGCONT);
 
     printf("Waiting for child process (PID %d) to exit...\n", child_pid);
 
     usleep(1000);
 
-    token_thingy(self_name_port_main);
     // token_thingy(mach_task_self());
     // token_thingy(child_task_name_port);
+    printf("token_thingy done\n");
+    fflush(stdout);
 
     // Prepare to receive the dead-name notification
     struct {
