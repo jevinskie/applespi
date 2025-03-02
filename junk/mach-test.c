@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -24,7 +25,7 @@
 //                => SEND | RCV | SEND_TIMEOUT | SEND_OVERRIDE | RCV_TIMEOUT | RCV_INTERRUPT |
 //                RCV_GUARDED_DESC
 //            msgh_size         = 0x00000024 36
-//            msgh_remote_port  = 0x00001d03 7427
+//            msgh_remote_port  = 0x00000e03 3587
 //            msgh_local_port   = 0x00000707 1799
 //            msgh_voucher_port = 0x00000000
 //            msgh_id           = 0x00000d82 3458
@@ -32,11 +33,43 @@
 // x1: 0x0000000200000003
 //     => SEND | RCV | SEND_KOBJECT_CALL
 // x2: 0x0000002400001513
-// x3: 0x0000070700001d03
+// x3: 0x0000070700000e03
 // x4: 0x00000d8200000000
 // x5: 0x0000070700000000
 // x6: 0x0000000000000030
 // x7: 0x0000000000000000
+
+// Reply:
+// x0: =>
+//            (mach_msg_header_t) {
+//                msgh_bits = 0x80001200
+//                msgh_size = 0x00000028 40
+//                msgh_remote_port = 0x00000000
+//                msgh_local_port = 0x00000707 1799
+//                msgh_voucher_port = 0x00000000
+//                msgh_id = 0x00000de6 3558 (3458 + 100)
+//            }
+// x0 + sizeof(mach_msg_header_t) (24) (24): =>
+//            (mach_msg_body_t)  (msgh_descriptor_count = 0x00000001)
+// x0 + sizeof(mach_msg_header_t) (24) + sizeof(mach_msg_body_t) (4) (28): =>
+//            (mach_msg_port_descriptor_t) {
+//                name = 0x00001c03 7171
+//                pad1 = 0x00000000
+//                pad2 = 0x00000000
+//                disposition = 0x00000011 MACH_MSG_TYPE_MOVE_SEND
+//                type = 0x00000000
+//            }
+
+// MACH_MSG_TYPE_MOVE_RECEIVE      16 0x10      Must hold receive right
+// MACH_MSG_TYPE_MOVE_SEND         17 0x11      Must hold send right(s)
+// MACH_MSG_TYPE_MOVE_SEND_ONCE    18 0x12      Must hold sendonce right
+// MACH_MSG_TYPE_COPY_SEND         19 0x13      Must hold send right(s)
+// MACH_MSG_TYPE_MAKE_SEND         20 0x14      Must hold receive right
+// MACH_MSG_TYPE_MAKE_SEND_ONCE    21 0x15      Must hold receive right
+// MACH_MSG_TYPE_COPY_RECEIVE      22 0x16      NOT VALID
+// MACH_MSG_TYPE_DISPOSE_RECEIVE   24 0x17      must hold receive right
+// MACH_MSG_TYPE_DISPOSE_SEND      25 0x18      must hold send right(s)
+// MACH_MSG_TYPE_DISPOSE_SEND_ONCE 26 0x19      must hold sendonce right
 
 #define MACH64_MSG_OPTION_NONE       0x0ull
 #define MACH64_SEND_MSG              MACH_SEND_MSG           // 0x00000001
@@ -586,6 +619,7 @@ static void token_thingy(mach_port_t port) {
         mach_msg_audit_trailer_t trailer;
     };
     struct msg_s msg = {};
+    memset(&msg, 0, sizeof(msg));
     // msg.hdr.msgh_bits             = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
     msg.hdr.msgh_size             = sizeof(msg.hdr);
     msg.hdr.msgh_id               = 3;
@@ -863,7 +897,8 @@ int main(int argc, char **argv) {
         mach_msg_body_t body;
         mach_msg_port_descriptor_t port;
         mach_msg_trailer_t trailer;
-    } message;
+    } message = {};
+    memset(&message, 0, sizeof(message));
 
     // Wait for the message (this will block until the process exits)
     kr = mach_msg(&message.header, MACH_RCV_MSG, 0, sizeof(message), notification_port,
