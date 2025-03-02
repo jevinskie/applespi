@@ -616,12 +616,13 @@ static void token_thingy(mach_port_t port) {
     memset(&msg_token_mega, 0, sizeof(msg_token_mega));
 
     // msg_token.hdr.msgh_bits             = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
-    msg_token.hdr.msgh_bits = MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT |
-                              MACH_RCV_INTERRUPT | MACH_RCV_GUARDED_DESC;
-    msg_token.hdr.msgh_size        = sizeof(msg_token);
-    msg_token.hdr.msgh_id          = 3458;
-    msg_token.hdr.msgh_local_port  = token_reply_port;
-    msg_token.hdr.msgh_remote_port = port;
+    msg_token_mega.req.hdr.msgh_bits = MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT |
+                                       MACH_RCV_TIMEOUT | MACH_RCV_INTERRUPT |
+                                       MACH_RCV_GUARDED_DESC;
+    msg_token_mega.req.hdr.msgh_size        = sizeof(msg_token_mega.req);
+    msg_token_mega.req.hdr.msgh_id          = 3458;
+    msg_token_mega.req.hdr.msgh_local_port  = token_reply_port;
+    msg_token_mega.req.hdr.msgh_remote_port = port;
 
     // msg_token.trailer.msgh_trailer_type = MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
     //                                 MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
@@ -633,17 +634,18 @@ static void token_thingy(mach_port_t port) {
 
     printf("\n\n\n\n");
     printf("msg_token before dumps:\n");
-    dump_header(&msg_token.hdr);
+    dump_header(&msg_token_mega.req.hdr);
     printf("\n\n");
     fflush(stdout);
 
     // kr = my_mach_msg(&msg_token.hdr, MACH_SEND_MSG, msg_token.hdr.msgh_size, 0, MACH_PORT_NULL,
     // 0, 0);
-    kr = my_mach_msg2(&msg_token.hdr, MACH64_SEND_MSG | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL,
-                      msg_token.hdr, msg_token.hdr.msgh_size, sizeof(msg_token_reply),
-                      msg_token.hdr.msgh_local_port, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
+    kr = my_mach_msg2(
+        &msg_token_mega.req.hdr, MACH64_SEND_MSG | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL,
+        msg_token_mega.req.hdr, msg_token_mega.req.hdr.msgh_size, sizeof(msg_token_reply),
+        msg_token.hdr.msgh_local_port, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
     printf("msg_token after dumps:\n");
-    dump_header(&msg_token.hdr);
+    dump_header(&msg_token_mega.resp.hdr);
     printf("\n\n\n\n");
     fflush(stdout);
     if (kr != KERN_SUCCESS) {
