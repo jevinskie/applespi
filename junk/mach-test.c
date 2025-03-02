@@ -28,11 +28,21 @@
 #define MACH64_SEND_DK_CALL          0x0000001000000000ull
 #define MACH64_PEEK_MSG              0x4000000000000000ull
 #define MACH64_MACH_MSG2             0x8000000000000000ull
+#define MACH64_SEND_TRAILER          MACH_SEND_TRAILER
+#define MACH64_SEND_OVERRIDE         MACH_SEND_OVERRIDE
+#define MACH64_SEND_TIMEOUT          MACH_SEND_TIMEOUT
+
+#define MACH64_SEND_SYNC_OVERRIDE    MACH_SEND_SYNC_OVERRIDE
 #define MACH64_SEND_INTERRUPT        MACH_SEND_INTERRUPT
+#define MACH64_SEND_NOTIFY           MACH_SEND_NOTIFY
 #define MACH64_RCV_INTERRUPT         MACH_RCV_INTERRUPT
 #define MACH64_RCV_MSG               MACH_RCV_MSG
 #define MACH64_RCV_SYNC_WAIT         MACH_RCV_SYNC_WAIT
 #define MACH64_RCV_VOUCHER           MACH_RCV_VOUCHER
+#define MACH64_RCV_TIMEOUT           MACH_RCV_TIMEOUT
+#define MACH64_RCV_GUARDED_DESC      MACH_RCV_GUARDED_DESC
+#define MACH64_RCV_SYNC_PEEK         MACH_RCV_SYNC_PEEK
+#define MACH64_MSG_STRICT_REPLY      MACH_MSG_STRICT_REPLY
 
 #define MACH_MSGV_IDX_MSG            ((uint32_t)0)
 #define MACH_MSGV_IDX_AUX            ((uint32_t)1)
@@ -505,9 +515,10 @@ static void token_thingy(mach_port_t port) {
     // MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
 
     // kr = my_mach_msg(&msg.hdr, MACH_SEND_MSG, msg.hdr.msgh_size, 0, MACH_PORT_NULL, 0, 0);
-    kr = my_mach_msg2(&msg.hdr, MACH64_RCV_MSG | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL, msg.hdr,
-                      msg.hdr.msgh_size, msg.trailer.msgh_trailer_size, msg.hdr.msgh_local_port, 0,
-                      MACH_MSG_PRIORITY_UNSPECIFIED);
+    kr = my_mach_msg2(
+        &msg.hdr, MACH64_RCV_MSG | MACH_SEND_TIMEOUT | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL,
+        msg.hdr, msg.hdr.msgh_size, msg.trailer.msgh_trailer_size, msg.hdr.msgh_local_port, 0,
+        MACH_MSG_PRIORITY_UNSPECIFIED);
     if (kr != KERN_SUCCESS) {
         printf("mach_msg receive failed: 0x%08x a.k.a '%s'\n", kr, mach_error_string(kr));
         abort();
@@ -737,8 +748,8 @@ int main(int argc, char **argv) {
 
     usleep(1000);
 
-    // token_thingy(mach_task_self());
-    token_thingy(child_task_name_port);
+    token_thingy(mach_task_self());
+    // token_thingy(child_task_name_port);
 
     // Prepare to receive the dead-name notification
     struct {
