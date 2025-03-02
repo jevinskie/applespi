@@ -232,6 +232,42 @@ mach_msg2_trap(void *data, mach_msg_option64_t options, uint64_t msgh_bits_and_s
                uint64_t msgh_remote_and_local_port, uint64_t msgh_voucher_and_id,
                uint64_t desc_count_and_rcv_name, uint64_t rcv_size_and_priority, uint64_t timeout);
 
+extern mach_msg_return_t mach_msg2_internal(void *data, mach_msg_option64_t option64,
+                                            uint64_t msgh_bits_and_send_size,
+                                            uint64_t msgh_remote_and_local_port,
+                                            uint64_t msgh_voucher_and_id,
+                                            uint64_t desc_count_and_rcv_name,
+                                            uint64_t rcv_size_and_priority, uint64_t timeout);
+
+void *dummy_mach_msg2_trap     = mach_msg2_trap;
+void *dummy_mach_msg2_internal = mach_msg2_internal;
+
+#ifdef __MigPackStructs
+#pragma pack(push, 4)
+#endif
+typedef struct {
+    mach_msg_header_t Head;
+    NDR_record_t NDR;
+    task_flavor_t flavor;
+} titgtp_req __attribute__((unused));
+#ifdef __MigPackStructs
+#pragma pack(pop)
+#endif
+
+#ifdef __MigPackStructs
+#pragma pack(push, 4)
+#endif
+typedef struct {
+    mach_msg_header_t Head;
+    /* start of the kernel processed data */
+    mach_msg_body_t msgh_body;
+    mach_msg_port_descriptor_t task_port;
+    /* end of the kernel processed data */
+} titgtp_resp __attribute__((unused));
+#ifdef __MigPackStructs
+#pragma pack(pop)
+#endif
+
 static void dump_header(const mach_msg_header_t *hdr) {
     printf("mach_msg_header_t        @ %p\n", hdr);
     printf("mach_msg_bits_t          msgh_bits: 0x%08x %u\n", hdr->msgh_bits, hdr->msgh_bits);
@@ -657,6 +693,10 @@ static void token_thingy(mach_port_t port) {
     } msg_token_mega = {};
     memset(&msg_token_mega, 0, sizeof(msg_token_mega));
 
+    printf("sizeof(msg_token_mega.req): %zu\n", sizeof(msg_token_mega.req));
+    printf("sizeof(msg_token_mega.resp): %zu\n", sizeof(msg_token_mega.resp));
+    fflush(stdout);
+
     // msg_token.hdr.msgh_bits             = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
     msg_token_mega.req.hdr.msgh_bits = MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT |
                                        MACH_RCV_TIMEOUT | MACH_RCV_INTERRUPT |
@@ -800,6 +840,9 @@ int main(int argc, char **argv) {
     if (argc < 2) {
         printf("usage: mach-test <child executable to spawn> <child args>");
     }
+
+    printf("sizeof(titgtp_req): %zu\n", sizeof(titgtp_req));
+    printf("sizeof(titgtp_resp): %zu\n", sizeof(titgtp_resp));
 
     printf("mach_task_self: 0x%08x %u\n", mach_task_self(), mach_task_self());
 
