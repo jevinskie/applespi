@@ -113,6 +113,18 @@
 #define __PTK_LIBDISPATCH_KEY8       28
 #define OS_VOUCHER_TSD_KEY           __PTK_LIBDISPATCH_KEY8
 
+#define NDR_RECORD             \
+    ((NDR_record_t){           \
+        0, /* mig_reserved */  \
+        0, /* mig_reserved */  \
+        0, /* mig_reserved */  \
+        NDR_PROTOCOL_2_0,      \
+        NDR_INT_LITTLE_ENDIAN, \
+        NDR_CHAR_ASCII,        \
+        NDR_FLOAT_IEEE,        \
+        0,                     \
+    })
+
 #define _OS_OBJECT_HEADER(isa, ref_cnt, xref_cnt)                       \
     isa; /* must be pointer-sized and use __ptrauth_objc_isa_pointer */ \
     int volatile ref_cnt;                                               \
@@ -653,7 +665,7 @@ static void token_thingy(mach_port_t port) {
     msg_token_mega.req.hdr.msgh_id          = 3458;
     msg_token_mega.req.hdr.msgh_local_port  = token_reply_port;
     msg_token_mega.req.hdr.msgh_remote_port = port;
-    msg_token_mega.req.ndr.int_rep          = '\x01';
+    msg_token_mega.req.ndr                  = NDR_RECORD;
     msg_token_mega.req.flavor               = TASK_FLAVOR_NAME;
 
     // msg_token.trailer.msgh_trailer_type = MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
