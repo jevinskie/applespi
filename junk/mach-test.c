@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <libproc.h>
 #include <mach/mach.h>
+#include <mach/mach_traps.h>
 #include <ptrauth.h>
 #include <signal.h>
 #include <spawn.h>
@@ -15,9 +16,22 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define MACH64_MSG_OPTION_NONE       0ull
-#define MACH64_SEND_MSG              MACH_SEND_MSG
-#define MACH64_RCV_MSG               MACH_RCV_MSG
+#define MACH64_MSG_OPTION_NONE       0x0ull
+#define MACH64_SEND_MSG              MACH_SEND_MSG           // 0x00000001
+#define MACH64_RCV_MSG               MACH_RCV_MSG            // 0x00000002
+#define MACH64_SEND_TIMEOUT          MACH_SEND_TIMEOUT       // 0x00000010
+#define MACH64_SEND_OVERRIDE         MACH_SEND_OVERRIDE      // 0x00000020
+#define MACH64_SEND_INTERRUPT        MACH_SEND_INTERRUPT     // 0x00000040
+#define MACH64_SEND_NOTIFY           MACH_SEND_NOTIFY        // 0x00000080
+#define MACH64_RCV_TIMEOUT           MACH_RCV_TIMEOUT        // 0x00000100
+#define MACH64_MSG_STRICT_REPLY      MACH_MSG_STRICT_REPLY   // 0x00000200
+#define MACH64_RCV_INTERRUPT         MACH_RCV_INTERRUPT      // 0x00000400
+#define MACH64_RCV_VOUCHER           MACH_RCV_VOUCHER        // 0x00000800
+#define MACH64_RCV_GUARDED_DESC      MACH_RCV_GUARDED_DESC   // 0x00001000
+#define MACH64_RCV_SYNC_WAIT         MACH_RCV_SYNC_WAIT      // 0x00004000
+#define MACH64_RCV_SYNC_PEEK         MACH_RCV_SYNC_PEEK      // 0x00008000
+#define MACH64_SEND_TRAILER          MACH_SEND_TRAILER       // 0x00020000
+#define MACH64_SEND_SYNC_OVERRIDE    MACH_SEND_SYNC_OVERRIDE // 0x00100000
 #define MACH64_MSG_VECTOR            0x0000000100000000ull
 #define MACH64_SEND_KOBJECT_CALL     0x0000000200000000ull
 #define MACH64_SEND_MQ_CALL          0x0000000400000000ull
@@ -25,21 +39,6 @@
 #define MACH64_SEND_DK_CALL          0x0000001000000000ull
 #define MACH64_PEEK_MSG              0x4000000000000000ull
 #define MACH64_MACH_MSG2             0x8000000000000000ull
-#define MACH64_SEND_TRAILER          MACH_SEND_TRAILER
-#define MACH64_SEND_OVERRIDE         MACH_SEND_OVERRIDE
-#define MACH64_SEND_TIMEOUT          MACH_SEND_TIMEOUT
-
-#define MACH64_SEND_SYNC_OVERRIDE    MACH_SEND_SYNC_OVERRIDE
-#define MACH64_SEND_INTERRUPT        MACH_SEND_INTERRUPT
-#define MACH64_SEND_NOTIFY           MACH_SEND_NOTIFY
-#define MACH64_RCV_INTERRUPT         MACH_RCV_INTERRUPT
-#define MACH64_RCV_MSG               MACH_RCV_MSG
-#define MACH64_RCV_SYNC_WAIT         MACH_RCV_SYNC_WAIT
-#define MACH64_RCV_VOUCHER           MACH_RCV_VOUCHER
-#define MACH64_RCV_TIMEOUT           MACH_RCV_TIMEOUT
-#define MACH64_RCV_GUARDED_DESC      MACH_RCV_GUARDED_DESC
-#define MACH64_RCV_SYNC_PEEK         MACH_RCV_SYNC_PEEK
-#define MACH64_MSG_STRICT_REPLY      MACH_MSG_STRICT_REPLY
 
 #define MACH_MSGV_IDX_MSG            ((uint32_t)0)
 #define MACH_MSGV_IDX_AUX            ((uint32_t)1)
@@ -549,7 +548,7 @@ static void token_thingy(mach_port_t port) {
     }
 
     mach_port_t self_task_name_port_from_id_token = MACH_PORT_NULL;
-    kr = task_identity_token_get_task_port(self_task_id_token, TASK_FLAVOR_CONTROL,
+    kr = task_identity_token_get_task_port(self_task_id_token, TASK_FLAVOR_NAME,
                                            &self_task_name_port_from_id_token);
     printf("self_task_name_port_from_id_token: %u 0x%08x\n", self_task_name_port_from_id_token,
            self_task_name_port_from_id_token);
@@ -625,9 +624,18 @@ int main(int argc, char **argv) {
 
     printf("mach_task_self: %u 0x%08x\n", mach_task_self(), mach_task_self());
 
+    kern_return_t kr;
+    mach_port_name_t self_name_port_main = MACH_PORT_NULL;
+    kr = task_name_for_pid(mach_task_self(), getpid(), &self_name_port_main);
+    if (kr != KERN_SUCCESS) {
+        printf("main task_name_for_pid(self) failed: 0x%08x a.k.a '%s'\n", kr,
+               mach_error_string(kr));
+        abort();
+    }
+    printf("self_name_port_main: %u 0x%08x\n", self_name_port_main, self_name_port_main);
+
     pid_t child_pid;
     int child_status;
-    kern_return_t kr;
 #if DO_AUDIT
     kern_return_t tir;
     int aspr;
@@ -821,7 +829,8 @@ int main(int argc, char **argv) {
 
     usleep(1000);
 
-    token_thingy(mach_task_self());
+    token_thingy(self_name_port_main);
+    // token_thingy(mach_task_self());
     // token_thingy(child_task_name_port);
 
     // Prepare to receive the dead-name notification
