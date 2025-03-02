@@ -506,7 +506,8 @@ static void token_thingy(mach_port_t port) {
 
     // kr = my_mach_msg(&msg.hdr, MACH_SEND_MSG, msg.hdr.msgh_size, 0, MACH_PORT_NULL, 0, 0);
     kr = my_mach_msg2(&msg.hdr, MACH64_RCV_MSG | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL, msg.hdr,
-                      msg.hdr.msgh_size, 0, MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
+                      msg.hdr.msgh_size, msg.trailer.msgh_trailer_size, msg.hdr.msgh_local_port, 0,
+                      MACH_MSG_PRIORITY_UNSPECIFIED);
     if (kr != KERN_SUCCESS) {
         printf("mach_msg receive failed: 0x%08x a.k.a '%s'\n", kr, mach_error_string(kr));
         abort();
