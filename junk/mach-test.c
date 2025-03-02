@@ -1,3 +1,4 @@
+#include <mach/mach_error.h>
 #include <mach/message.h>
 #undef NDEBUG
 #include <assert.h>
@@ -295,7 +296,7 @@ static void dump_header(const mach_msg_header_t *hdr) {
     fflush(stdout);
 }
 
-static void dump_audit_trailer(const mach_msg_audit_trailer_t *trailer) {
+static void dump_msg_audit_trailer(const mach_msg_audit_trailer_t *trailer) {
     printf("mach_msg_audit_trailer_t @ %p\n", trailer);
     printf("mach_msg_trailer_type_t  msgh_trailer_type: 0x%08x\n", trailer->msgh_trailer_type);
     printf("mach_msg_trailer_size_t  msgh_trailer_size: 0x%08x %u\n", trailer->msgh_trailer_size,
@@ -773,7 +774,7 @@ static void token_thingy(mach_port_t port) {
     msg_token_mega.req.hdr.msgh_bits =
         MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT | MACH_RCV_INTERRUPT |
         MACH_RCV_GUARDED_DESC | MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
-        MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_SENDER);
+        MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT);
     msg_token_mega.req.hdr.msgh_size        = sizeof(msg_token_mega.req);
     msg_token_mega.req.hdr.msgh_id          = 3458;
     msg_token_mega.req.hdr.msgh_local_port  = token_reply_port;
@@ -806,12 +807,31 @@ static void token_thingy(mach_port_t port) {
                       msg_token_mega.req.hdr, msg_token_mega.req.hdr.msgh_size,
                       sizeof(msg_token_mega.resp), msg_token_mega.req.hdr.msgh_local_port, 0,
                       MACH_MSG_PRIORITY_UNSPECIFIED);
-    printf("msg_token after dumps:\n");
+    printf("my_mach_msg2 returned %d '%s' msg_token after dumps:\n", kr, mach_error_string(kr));
     dump_header(&msg_token_mega.resp.hdr);
     dump_msg_body(&msg_token_mega.resp.msgh_body);
-    dump_msg_port_desc(&msg_token_mega.resp.task_port);
-    // dump_msg_trailer(&msg_token_mega.resp.trailer);
-    dump_msg_security_trailer(&msg_token_mega.resp.trailer);
+    // dump_msg_port_desc(&msg_token_mega.resp.task_port);
+    printf("dump_msg_trailer(&msg_token_mega.resp.trailer):\n");
+    dump_msg_trailer(&msg_token_mega.resp.trailer);
+    printf("dump_msg_trailer((mach_msg_trailer_t *)&msg_token_mega.resp.task_port):\n");
+    dump_msg_trailer((mach_msg_trailer_t *)&msg_token_mega.resp.task_port);
+    // printf("dump_msg_security_trailer(&msg_token_mega.resp.trailer):\n");
+    // dump_msg_security_trailer(&msg_token_mega.resp.trailer);
+    // printf("dump_msg_security_trailer((mach_msg_security_trailer_t
+    // *)&msg_token_mega.resp.task_port):\n");
+    // dump_msg_security_trailer((mach_msg_security_trailer_t *)&msg_token_mega.resp.task_port);
+    printf("dump_msg_audit_trailer(&msg_token_mega.resp.trailer):\n");
+    dump_msg_audit_trailer(&msg_token_mega.resp.trailer);
+    printf("dump_msg_audit_trailer((mach_msg_audit_trailer_t *)&msg_token_mega.resp.task_port):\n");
+    dump_msg_audit_trailer((mach_msg_audit_trailer_t *)&msg_token_mega.resp.task_port);
+    uint32_t *ptval =
+        (uint32_t *)((uintptr_t)&msg_token_mega.resp.task_port + sizeof(mach_msg_trailer_t));
+    printf("trailer: @ %p\n", ptval);
+    for (uint32_t i = 0; i < msg_token_mega.resp.trailer.msgh_trailer_size + 3; ++i) {
+        printf("trailer[%u]: 0x%08x %u\n", i, ptval[i], ptval[i]);
+    }
+
+    // dump_msg_security_trailer(&msg_token_mega.resp.trailer);
     printf("\n\n\n\n");
     fflush(stdout);
     if (kr != KERN_SUCCESS) {
@@ -881,7 +901,7 @@ static void token_thingy(mach_port_t port) {
     printf("\n\n\n\n");
     printf("before dumps:\n");
     dump_header(&msg.hdr);
-    dump_audit_trailer(&msg.trailer);
+    dump_msg_audit_trailer(&msg.trailer);
     printf("\n\n");
     fflush(stdout);
 
@@ -892,7 +912,7 @@ static void token_thingy(mach_port_t port) {
         MACH_MSG_PRIORITY_UNSPECIFIED);
     printf("after dumps:\n");
     dump_header(&msg.hdr);
-    dump_audit_trailer(&msg.trailer);
+    dump_msg_audit_trailer(&msg.trailer);
     printf("\n\n\n\n");
 
     fflush(stdout);
