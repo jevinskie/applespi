@@ -184,13 +184,13 @@ mach_msg2_trap(void *data, mach_msg_option64_t options, uint64_t msgh_bits_and_s
 
 static void dump_header(const mach_msg_header_t *hdr) {
     printf("mach_msg_header_t        @ %p\n", hdr);
-    printf("mach_msg_bits_t          msgh_bits: %u 0x%08x\n", hdr->msgh_bits, hdr->msgh_bits);
-    printf("mach_msg_size_t          msgh_size: %u 0x%08x\n", hdr->msgh_size, hdr->msgh_size);
-    printf("mach_port_t              msgh_remote_port: %u 0x%08x\n", hdr->msgh_remote_port,
+    printf("mach_msg_bits_t          msgh_bits: 0x%08x %u\n", hdr->msgh_bits, hdr->msgh_bits);
+    printf("mach_msg_size_t          msgh_size: 0x%08x %u\n", hdr->msgh_size, hdr->msgh_size);
+    printf("mach_port_t              msgh_remote_port: 0x%08x %u\n", hdr->msgh_remote_port,
            hdr->msgh_remote_port);
-    printf("mach_port_t              msgh_local_port: %u 0x%08x\n", hdr->msgh_local_port,
+    printf("mach_port_t              msgh_local_port: 0x%08x %u\n", hdr->msgh_local_port,
            hdr->msgh_local_port);
-    printf("mach_port_name_t         msgh_voucher_port: %u 0x%08x\n", hdr->msgh_voucher_port,
+    printf("mach_port_name_t         msgh_voucher_port: 0x%08x %u\n", hdr->msgh_voucher_port,
            hdr->msgh_voucher_port);
     printf("mach_msg_id_t            msgh_id: %d 0x%08x\n", hdr->msgh_id, (uint32_t)hdr->msgh_id);
     fflush(stdout);
@@ -198,33 +198,32 @@ static void dump_header(const mach_msg_header_t *hdr) {
 
 static void dump_audit_trailer(const mach_msg_audit_trailer_t *trailer) {
     printf("mach_msg_audit_trailer_t @ %p\n", trailer);
-    printf("mach_msg_trailer_type_t  msgh_trailer_type: %u 0x%08x\n", trailer->msgh_trailer_type,
-           trailer->msgh_trailer_type);
-    printf("mach_msg_trailer_size_t  msgh_trailer_size: %u 0x%08x\n", trailer->msgh_trailer_size,
+    printf("mach_msg_trailer_type_t  msgh_trailer_type: 0x%08x\n", trailer->msgh_trailer_type);
+    printf("mach_msg_trailer_size_t  msgh_trailer_size: 0x%08x %u\n", trailer->msgh_trailer_size,
            trailer->msgh_trailer_size);
-    printf("mach_port_seqno_t        msgh_seqno: %u 0x%08x\n", trailer->msgh_seqno,
+    printf("mach_port_seqno_t        msgh_seqno: 0x%08x %u\n", trailer->msgh_seqno,
            trailer->msgh_seqno);
     printf("security_token_t         msgh_sender: @ %p\n", &trailer->msgh_sender);
-    printf("security_token_t             msgh_sender[0]: UID %u 0x%08x\n",
+    printf("security_token_t             msgh_sender[0]: UID 0x%08x %u\n",
            trailer->msgh_sender.val[0], trailer->msgh_sender.val[0]);
-    printf("security_token_t             msgh_sender[1]: GID %u 0x%08x\n",
+    printf("security_token_t             msgh_sender[1]: GID 0x%08x %u\n",
            trailer->msgh_sender.val[1], trailer->msgh_sender.val[1]);
     printf("audit_token_t            msgh_audit: @ %p\n", &trailer->msgh_audit);
-    printf("audit_token_t                msgh_audit[0]: AuditUID %u 0x%08x\n",
+    printf("audit_token_t                msgh_audit[0]: AuditUID 0x%08x %u\n",
            trailer->msgh_audit.val[0], trailer->msgh_audit.val[0]);
-    printf("audit_token_t                msgh_audit[1]: EUID %u 0x%08x\n",
+    printf("audit_token_t                msgh_audit[1]: EUID 0x%08x %u\n",
            trailer->msgh_audit.val[1], trailer->msgh_audit.val[1]);
-    printf("audit_token_t                msgh_audit[2]: EGID %u 0x%08x\n",
+    printf("audit_token_t                msgh_audit[2]: EGID 0x%08x %u\n",
            trailer->msgh_audit.val[2], trailer->msgh_audit.val[2]);
-    printf("audit_token_t                msgh_audit[3]: RUID %u 0x%08x\n",
+    printf("audit_token_t                msgh_audit[3]: RUID 0x%08x %u\n",
            trailer->msgh_audit.val[3], trailer->msgh_audit.val[3]);
-    printf("audit_token_t                msgh_audit[4]: RGID %u 0x%08x\n",
+    printf("audit_token_t                msgh_audit[4]: RGID 0x%08x %u\n",
            trailer->msgh_audit.val[4], trailer->msgh_audit.val[4]);
-    printf("audit_token_t                msgh_audit[5]: PID %u 0x%08x\n",
+    printf("audit_token_t                msgh_audit[5]: PID 0x%08x %u\n",
            trailer->msgh_audit.val[5], trailer->msgh_audit.val[5]);
-    printf("audit_token_t                msgh_audit[6]: AuditSessionID %u 0x%08x\n",
+    printf("audit_token_t                msgh_audit[6]: AuditSessionID 0x%08x %u\n",
            trailer->msgh_audit.val[6], trailer->msgh_audit.val[6]);
-    printf("audit_token_t                msgh_audit[7]: PID Version %u 0x%08x\n",
+    printf("audit_token_t                msgh_audit[7]: PID Version 0x%08x %u\n",
            trailer->msgh_audit.val[7], trailer->msgh_audit.val[7]);
     fflush(stdout);
 }
@@ -495,7 +494,7 @@ static mach_msg_return_t my_mach_msg(mach_msg_header_t *msg, mach_msg_option_t o
 }
 
 static void token_thingy(mach_port_t port) {
-    printf("token_thiny port: %u 0x%08x\n", port, port);
+    printf("token_thiny port: 0x%08x %u\n", port, port);
     kern_return_t kr = KERN_FAILURE;
 
 #if 0
@@ -519,7 +518,7 @@ static void token_thingy(mach_port_t port) {
     msg.header.msgh_id = 1;
     msg.port.name = mach_task_self();
 
-    printf("token_thiny port: %u 0x%08x\n", port, port);
+    printf("token_thiny port: 0x%08x %u\n", port, port);
 
     kern_return_t kr =
         mach_msg_overwrite(&msg.header, options, sizeof(msg.header), 0, MACH_PORT_NULL,
@@ -545,7 +544,7 @@ static void token_thingy(mach_port_t port) {
 
     mach_port_t new_rcv_port = MACH_PORT_NULL;
     kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &new_rcv_port);
-    printf("new_rcv_port mach_port_allocate: %u 0x%08x\n", new_rcv_port, new_rcv_port);
+    printf("new_rcv_port mach_port_allocate: 0x%08x %u\n", new_rcv_port, new_rcv_port);
     if (kr != KERN_SUCCESS) {
         printf("new_rcv_port mach_port_allocate failed: 0x%08x a.k.a '%s'\n", kr,
                mach_error_string(kr));
@@ -562,7 +561,7 @@ static void token_thingy(mach_port_t port) {
 
     task_id_token_t self_task_id_token = MACH_PORT_NULL;
     kr = task_create_identity_token(mach_task_self(), &self_task_id_token);
-    printf("self_task_id_token task_create_identity_token: %u 0x%08x\n", self_task_id_token,
+    printf("self_task_id_token task_create_identity_token: 0x%08x %u\n", self_task_id_token,
            self_task_id_token);
     if (kr != KERN_SUCCESS) {
         printf("self_task_id_token task_create_identity_token failed: 0x%08x a.k.a '%s'\n", kr,
@@ -573,7 +572,7 @@ static void token_thingy(mach_port_t port) {
     mach_port_t self_task_name_port_from_id_token = MACH_PORT_NULL;
     kr = task_identity_token_get_task_port(self_task_id_token, TASK_FLAVOR_NAME,
                                            &self_task_name_port_from_id_token);
-    printf("self_task_name_port_from_id_token task_identity_token_get_task_port: %u 0x%08x\n",
+    printf("self_task_name_port_from_id_token task_identity_token_get_task_port: 0x%08x %u\n",
            self_task_name_port_from_id_token, self_task_name_port_from_id_token);
     if (kr != KERN_SUCCESS) {
         printf("self_task_name_port_from_id_token task_identity_token_get_task_port failed: 0x%08x "
@@ -645,7 +644,7 @@ int main(int argc, char **argv) {
         printf("usage: mach-test <child executable to spawn> <child args>");
     }
 
-    printf("mach_task_self: %u 0x%08x\n", mach_task_self(), mach_task_self());
+    printf("mach_task_self: 0x%08x %u\n", mach_task_self(), mach_task_self());
 
     kern_return_t kr;
     mach_port_name_t self_name_port_main = MACH_PORT_NULL;
@@ -655,7 +654,7 @@ int main(int argc, char **argv) {
                mach_error_string(kr));
         abort();
     }
-    printf("self_name_port_main: %u 0x%08x\n", self_name_port_main, self_name_port_main);
+    printf("self_name_port_main: 0x%08x %u\n", self_name_port_main, self_name_port_main);
 
     pid_t child_pid;
     int child_status;
@@ -778,7 +777,7 @@ int main(int argc, char **argv) {
     // Get task port for the child
     mach_port_t child_task_name_port = MACH_PORT_NULL;
     kr = task_name_for_pid(mach_task_self(), child_pid, &child_task_name_port);
-    printf("child_task_name_port task_name_for_pid: %u 0x%08x\n", child_task_name_port,
+    printf("child_task_name_port task_name_for_pid: 0x%08x %u\n", child_task_name_port,
            child_task_name_port);
     // kr = task_for_pid(mach_task_self(), child_pid, &child_task_name_port);
     if (kr != KERN_SUCCESS) {
@@ -791,7 +790,7 @@ int main(int argc, char **argv) {
     // Create a notification port
     mach_port_t notification_port = MACH_PORT_NULL;
     kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &notification_port);
-    printf("notification_port mach_port_allocate: %u 0x%08x\n", notification_port,
+    printf("notification_port mach_port_allocate: 0x%08x %u\n", notification_port,
            notification_port);
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to allocate notification port: %s\n", mach_error_string(kr));
@@ -805,7 +804,7 @@ int main(int argc, char **argv) {
     kr = mach_port_request_notification(mach_task_self(), child_task_name_port,
                                         MACH_NOTIFY_DEAD_NAME, 0, notification_port,
                                         MACH_MSG_TYPE_MAKE_SEND_ONCE, &prev_notif_port);
-    printf("prev_notif_port mach_port_request_notification: %u 0x%08x\n", prev_notif_port,
+    printf("prev_notif_port mach_port_request_notification: 0x%08x %u\n", prev_notif_port,
            prev_notif_port);
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to request notification: %s\n", mach_error_string(kr));
