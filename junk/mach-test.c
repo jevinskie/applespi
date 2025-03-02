@@ -16,6 +16,28 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+// task_identity_token_get_task_port(mach_task_self(), TASK_FLAVOR_NAME, &task_name_port)
+//     => mach_msg2_internal(...)
+// x0: =>
+//        (mach_msg_header_t) {
+//            msgh_bits         = 0x00001513
+//                => SEND | RCV | SEND_TIMEOUT | SEND_OVERRIDE | RCV_TIMEOUT | RCV_INTERRUPT |
+//                RCV_GUARDED_DESC
+//            msgh_size         = 0x00000024 36
+//            msgh_remote_port  = 0x00001d03 7427
+//            msgh_local_port   = 0x00000707 1799
+//            msgh_voucher_port = 0x00000000
+//            msgh_id           = 0x00000d82 3458
+//        }
+// x1: 0x0000000200000003
+//     => SEND | RCV | SEND_KOBJECT_CALL
+// x2: 0x0000002400001513
+// x3: 0x0000070700001d03
+// x4: 0x00000d8200000000
+// x5: 0x0000070700000000
+// x6: 0x0000000000000030
+// x7: 0x0000000000000000
+
 #define MACH64_MSG_OPTION_NONE       0x0ull
 #define MACH64_SEND_MSG              MACH_SEND_MSG           // 0x00000001
 #define MACH64_RCV_MSG               MACH_RCV_MSG            // 0x00000002
@@ -523,7 +545,7 @@ static void token_thingy(mach_port_t port) {
 
     mach_port_t new_rcv_port = MACH_PORT_NULL;
     kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &new_rcv_port);
-    printf("new_rcv_port: %u 0x%08x\n", new_rcv_port, new_rcv_port);
+    printf("new_rcv_port mach_port_allocate: %u 0x%08x\n", new_rcv_port, new_rcv_port);
     if (kr != KERN_SUCCESS) {
         printf("new_rcv_port mach_port_allocate failed: 0x%08x a.k.a '%s'\n", kr,
                mach_error_string(kr));
@@ -540,7 +562,8 @@ static void token_thingy(mach_port_t port) {
 
     task_id_token_t self_task_id_token = MACH_PORT_NULL;
     kr = task_create_identity_token(mach_task_self(), &self_task_id_token);
-    printf("self_task_id_token: %u 0x%08x\n", self_task_id_token, self_task_id_token);
+    printf("self_task_id_token task_create_identity_token: %u 0x%08x\n", self_task_id_token,
+           self_task_id_token);
     if (kr != KERN_SUCCESS) {
         printf("self_task_id_token task_create_identity_token failed: 0x%08x a.k.a '%s'\n", kr,
                mach_error_string(kr));
@@ -550,8 +573,8 @@ static void token_thingy(mach_port_t port) {
     mach_port_t self_task_name_port_from_id_token = MACH_PORT_NULL;
     kr = task_identity_token_get_task_port(self_task_id_token, TASK_FLAVOR_NAME,
                                            &self_task_name_port_from_id_token);
-    printf("self_task_name_port_from_id_token: %u 0x%08x\n", self_task_name_port_from_id_token,
-           self_task_name_port_from_id_token);
+    printf("self_task_name_port_from_id_token task_identity_token_get_task_port: %u 0x%08x\n",
+           self_task_name_port_from_id_token, self_task_name_port_from_id_token);
     if (kr != KERN_SUCCESS) {
         printf("self_task_name_port_from_id_token task_identity_token_get_task_port failed: 0x%08x "
                "a.k.a '%s'\n",
@@ -755,6 +778,8 @@ int main(int argc, char **argv) {
     // Get task port for the child
     mach_port_t child_task_name_port = MACH_PORT_NULL;
     kr = task_name_for_pid(mach_task_self(), child_pid, &child_task_name_port);
+    printf("child_task_name_port task_name_for_pid: %u 0x%08x\n", child_task_name_port,
+           child_task_name_port);
     // kr = task_for_pid(mach_task_self(), child_pid, &child_task_name_port);
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to get task port for PID %d: %s\n", child_pid,
@@ -762,24 +787,26 @@ int main(int argc, char **argv) {
         kill(child_pid, SIGKILL); // Kill the suspended child
         return EXIT_FAILURE;
     }
-    printf("child_task_name_port: %u 0x%08x\n", child_task_name_port, child_task_name_port);
 
     // Create a notification port
     mach_port_t notification_port = MACH_PORT_NULL;
     kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &notification_port);
+    printf("notification_port mach_port_allocate: %u 0x%08x\n", notification_port,
+           notification_port);
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to allocate notification port: %s\n", mach_error_string(kr));
         mach_port_deallocate(mach_task_self(), child_task_name_port);
         kill(child_pid, SIGKILL); // Kill the suspended child
         return EXIT_FAILURE;
     }
-    printf("notification_port: %u 0x%08x\n", notification_port, notification_port);
 
     // Request notification when the task port becomes a dead name
     mach_port_t prev_notif_port = MACH_PORT_NULL;
     kr = mach_port_request_notification(mach_task_self(), child_task_name_port,
                                         MACH_NOTIFY_DEAD_NAME, 0, notification_port,
                                         MACH_MSG_TYPE_MAKE_SEND_ONCE, &prev_notif_port);
+    printf("prev_notif_port mach_port_request_notification: %u 0x%08x\n", prev_notif_port,
+           prev_notif_port);
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to request notification: %s\n", mach_error_string(kr));
         mach_port_deallocate(mach_task_self(), child_task_name_port);
@@ -787,8 +814,6 @@ int main(int argc, char **argv) {
         kill(child_pid, SIGKILL); // Kill the suspended child
         return EXIT_FAILURE;
     }
-    printf("prev_notif_port: %u 0x%08x\n", prev_notif_port, prev_notif_port);
-    printf("notification_port: %u 0x%08x\n", notification_port, notification_port);
 
 #if DO_AUDIT
     audit_token_t child_token_susp;
