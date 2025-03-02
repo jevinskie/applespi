@@ -695,6 +695,7 @@ static void token_thingy(mach_port_t port) {
         mach_msg_header_t hdr;
         mach_msg_body_t msgh_body;
         mach_msg_port_descriptor_t task_port;
+        mach_msg_trailer_t trailer;
     };
     struct msg_token_resp_s msg_token_reply = {};
     memset(&msg_token_reply, 0, sizeof(msg_token_reply));
@@ -738,7 +739,7 @@ static void token_thingy(mach_port_t port) {
     // 0, 0);
     kr = my_mach_msg2(
         &msg_token_mega.req.hdr, MACH64_SEND_MSG | MACH64_RCV_MSG | MACH64_SEND_KOBJECT_CALL,
-        msg_token_mega.req.hdr, msg_token_mega.req.hdr.msgh_size, sizeof(msg_token_mega.resp) + 8,
+        msg_token_mega.req.hdr, msg_token_mega.req.hdr.msgh_size, sizeof(msg_token_mega.resp),
         msg_token_mega.req.hdr.msgh_local_port, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
     printf("msg_token after dumps:\n");
     dump_header(&msg_token_mega.resp.hdr);
@@ -840,8 +841,9 @@ static void cfi_test_two_bits_set(void) {
     header.msgh_local_port  = MACH_PORT_NULL;
     header.msgh_remote_port = mach_task_self();
     header.msgh_id          = 3409;
-    header.msgh_bits        = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
-    header.msgh_size        = sizeof(header);
+    header.msgh_bits =
+        MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND_ONCE, 0, 0);
+    header.msgh_size = sizeof(header);
 
     kr = my_mach_msg2(&header, MACH64_SEND_MSG | MACH64_SEND_KOBJECT_CALL, header, header.msgh_size,
                       0, MACH_PORT_NULL, 0, MACH_MSG_PRIORITY_UNSPECIFIED);
