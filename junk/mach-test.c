@@ -102,8 +102,6 @@ typedef struct voucher_s {
 #endif
 } voucher_s;
 
-typedef struct voucher_s *voucher_t;
-
 typedef struct _voucher_mach_udata_s {
     _voucher_magic_t vmu_magic;
     _voucher_priority_t vmu_priority;
@@ -163,7 +161,7 @@ mach_msg2_trap(void *data, mach_msg_option64_t options, uint64_t msgh_bits_and_s
                uint64_t msgh_remote_and_local_port, uint64_t msgh_voucher_and_id,
                uint64_t desc_count_and_rcv_name, uint64_t rcv_size_and_priority, uint64_t timeout);
 
-void dump_header(const mach_msg_header_t *hdr) {
+static void dump_header(const mach_msg_header_t *hdr) {
     printf("mach_msg_header_t        @ %p\n", hdr);
     printf("mach_msg_bits_t          msgh_bits: %u 0x%08x\n", hdr->msgh_bits, hdr->msgh_bits);
     printf("mach_msg_size_t          msgh_size: %u 0x%08x\n", hdr->msgh_size, hdr->msgh_size);
@@ -177,7 +175,7 @@ void dump_header(const mach_msg_header_t *hdr) {
     fflush(stdout);
 }
 
-void dump_audit_trailer(const mach_msg_audit_trailer_t *trailer) {
+static void dump_audit_trailer(const mach_msg_audit_trailer_t *trailer) {
     printf("mach_msg_audit_trailer_t @ %p\n", trailer);
     printf("mach_msg_trailer_type_t  msgh_trailer_type: %u 0x%08x\n", trailer->msgh_trailer_type,
            trailer->msgh_trailer_type);
@@ -541,6 +539,27 @@ static void token_thingy(mach_port_t port) {
         abort();
     }
 
+    task_id_token_t self_task_id_token = MACH_PORT_NULL;
+    kr = task_create_identity_token(mach_task_self(), &self_task_id_token);
+    printf("self_task_id_token: %u 0x%08x\n", self_task_id_token, self_task_id_token);
+    if (kr != KERN_SUCCESS) {
+        printf("self_task_id_token task_create_identity_token failed: 0x%08x a.k.a '%s'\n", kr,
+               mach_error_string(kr));
+        abort();
+    }
+
+    mach_port_t self_task_name_port_from_id_token = MACH_PORT_NULL;
+    kr = task_identity_token_get_task_port(self_task_id_token, TASK_FLAVOR_CONTROL,
+                                           &self_task_name_port_from_id_token);
+    printf("self_task_name_port_from_id_token: %u 0x%08x\n", self_task_name_port_from_id_token,
+           self_task_name_port_from_id_token);
+    if (kr != KERN_SUCCESS) {
+        printf("self_task_name_port_from_id_token task_identity_token_get_task_port failed: 0x%08x "
+               "a.k.a '%s'\n",
+               kr, mach_error_string(kr));
+        abort();
+    }
+
     struct msg_s {
         mach_msg_header_t hdr;
         mach_msg_audit_trailer_t trailer;
@@ -548,7 +567,7 @@ static void token_thingy(mach_port_t port) {
     struct msg_s msg = {};
     // msg.hdr.msgh_bits             = MACH_MSGH_BITS_SET(MACH_MSG_TYPE_COPY_SEND, 0, 0, 0);
     msg.hdr.msgh_size             = sizeof(msg.hdr);
-    msg.hdr.msgh_id               = 243243;
+    msg.hdr.msgh_id               = 3;
     msg.hdr.msgh_local_port       = new_rcv_port;
     msg.hdr.msgh_remote_port      = port;
     msg.trailer.msgh_trailer_type = MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
@@ -603,11 +622,8 @@ int main(int argc, char **argv) {
     if (argc < 2) {
         printf("usage: mach-test <child executable to spawn> <child args>");
     }
-    cfi_test_two_bits_set();
 
-    printf("dispatch_tsd_indexes: %d\n", dispatch_tsd_indexes.dti_voucher_index);
-    printf("dti_continuation_cache_index: %d\n", dispatch_tsd_indexes.dti_continuation_cache_index);
-    fflush(stdout);
+    printf("mach_task_self: %u 0x%08x\n", mach_task_self(), mach_task_self());
 
     pid_t child_pid;
     int child_status;
