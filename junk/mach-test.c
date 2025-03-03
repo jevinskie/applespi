@@ -753,8 +753,8 @@ static void token_thingy(mach_port_t port) {
 
     struct msg_token_resp_s {
         mach_msg_header_t hdr;
-        mach_msg_body_t msgh_body;
-        mach_msg_port_descriptor_t task_port;
+        // mach_msg_body_t msgh_body;
+        // mach_msg_port_descriptor_t task_port;
         mach_msg_audit_trailer_t trailer;
     };
     struct msg_token_resp_s msg_token_reply = {};
@@ -805,16 +805,16 @@ static void token_thingy(mach_port_t port) {
                           MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
                           MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT),
                       msg_token_mega.req.hdr, msg_token_mega.req.hdr.msgh_size,
-                      sizeof(msg_token_mega.resp), msg_token_mega.req.hdr.msgh_local_port, 0,
+                      sizeof(msg_token_mega.resp) + 16, msg_token_mega.req.hdr.msgh_local_port, 0,
                       MACH_MSG_PRIORITY_UNSPECIFIED);
     printf("my_mach_msg2 returned %d '%s' msg_token after dumps:\n", kr, mach_error_string(kr));
     dump_header(&msg_token_mega.resp.hdr);
-    dump_msg_body(&msg_token_mega.resp.msgh_body);
+    // dump_msg_body(&msg_token_mega.resp.msgh_body);
     // dump_msg_port_desc(&msg_token_mega.resp.task_port);
     printf("dump_msg_trailer(&msg_token_mega.resp.trailer):\n");
     dump_msg_trailer((mach_msg_trailer_t *)&msg_token_mega.resp.trailer);
-    printf("dump_msg_trailer((mach_msg_trailer_t *)&msg_token_mega.resp.task_port):\n");
-    dump_msg_trailer((mach_msg_trailer_t *)&msg_token_mega.resp.task_port);
+    // printf("dump_msg_trailer((mach_msg_trailer_t *)&msg_token_mega.resp.task_port):\n");
+    // dump_msg_trailer((mach_msg_trailer_t *)&msg_token_mega.resp.task_port);
     // printf("dump_msg_security_trailer(&msg_token_mega.resp.trailer):\n");
     // dump_msg_security_trailer(&msg_token_mega.resp.trailer);
     // printf("dump_msg_security_trailer((mach_msg_security_trailer_t
@@ -822,8 +822,9 @@ static void token_thingy(mach_port_t port) {
     // dump_msg_security_trailer((mach_msg_security_trailer_t *)&msg_token_mega.resp.task_port);
     printf("dump_msg_audit_trailer(&msg_token_mega.resp.trailer):\n");
     dump_msg_audit_trailer(&msg_token_mega.resp.trailer);
-    printf("dump_msg_audit_trailer((mach_msg_audit_trailer_t *)&msg_token_mega.resp.task_port):\n");
-    dump_msg_audit_trailer((mach_msg_audit_trailer_t *)&msg_token_mega.resp.task_port);
+    // printf("dump_msg_audit_trailer((mach_msg_audit_trailer_t
+    // *)&msg_token_mega.resp.task_port):\n"); dump_msg_audit_trailer((mach_msg_audit_trailer_t
+    // *)&msg_token_mega.resp.task_port);
     uint32_t *ptval = (uint32_t *)((uintptr_t)&msg_token_mega.resp +
                                    round_msg(msg_token_mega.resp.hdr.msgh_size));
     printf("trailer: @ %p\n", ptval);
