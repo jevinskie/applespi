@@ -119,9 +119,7 @@ int main(int argc, const char *argv[]) {
 
     // Send the message
     kr = mach_msg(&send_msg.req.header, // Message buffer
-                  MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT |
-                      MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
-                      MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT), // Options
+                  MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT, // Options
                   sizeof(send_msg.req),  // Send size - must be >= 28
                   sizeof(send_msg.resp), // Receive limit
                   hot_reply_port,        // Receive port
