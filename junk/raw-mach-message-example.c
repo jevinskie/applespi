@@ -1,3 +1,4 @@
+#include <mach/message.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -6,6 +7,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+typedef struct {
+    mach_msg_header_t Head;
+    NDR_record_t NDR;
+    kern_return_t RetCode;
+} mig_reply_error_duplicate_for_reference_t;
 
 // Define message structure for communicating with the WindowServer
 typedef struct {
@@ -36,14 +43,12 @@ typedef struct {
     uint32_t ver_major;
     uint32_t ver_minor;
     mach_msg_body_t body;
-    mach_msg_body_t body_pad;
-    mach_msg_body_t body_pad_pad;
     mach_msg_port_descriptor_t send_port;
     uint32_t login;
-    mach_msg_security_trailer_t trailer;
+    mach_msg_trailer_t trailer;
 } SkylightResp;
 
-_Static_assert(sizeof(SkylightResp) == 88, "resp msg size");
+_Static_assert(sizeof(SkylightResp) == 68, "resp msg size");
 
 typedef union {
     SkylightReq req;
@@ -189,8 +194,8 @@ int main(int argc, const char *argv[]) {
     // Send the message
     kr = mach_msg(&send_msg.req.header, // Message buffer
                   MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT, // Options
-                  sizeof(send_msg.req),  // Send size - must be >= 28
-                  sizeof(send_msg.resp), // Receive limit
+                  sizeof(send_msg.req),  // Send size - must be >= 24
+                  sizeof(send_msg.resp), // Receive limit - must be >= 68
                   hot_reply_port,        // Receive port
                   1000,                  // Timeout
                   MACH_PORT_NULL);       // Notification port
@@ -204,6 +209,10 @@ int main(int argc, const char *argv[]) {
     hexdump(&send_msg.resp, sizeof(send_msg.resp));
     assert(sizeof(send_msg.resp) % sizeof(uint32_t) == 0);
     hexdump32((uint32_t *)&send_msg.resp, sizeof(send_msg.resp) / sizeof(uint32_t));
+    printf("hexdump32 just %u instead of %zu\n", send_msg.resp.header.msgh_size,
+           sizeof(send_msg.resp));
+    assert(send_msg.resp.header.msgh_size % sizeof(uint32_t) == 0);
+    hexdump32((uint32_t *)&send_msg.resp, send_msg.resp.header.msgh_size / sizeof(uint32_t));
 
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to send phase A message: %s\n", mach_error_string(kr));
