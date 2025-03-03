@@ -1,4 +1,3 @@
-#include <mach/message.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -16,7 +15,7 @@ typedef struct {
 
 // Define message structure for communicating with the WindowServer
 typedef struct {
-    mach_msg_header_t header;
+    mach_msg_header_t head;
 } SkylightReq;
 
 _Static_assert(sizeof(SkylightReq) == 24, "req msg size");
@@ -38,13 +37,14 @@ _Static_assert(sizeof(SkylightReq) == 24, "req msg size");
 // 00000000 00000000                     |  ........
 
 typedef struct {
-    mach_msg_header_t header;
+    mach_msg_header_t head;
+    mach_msg_body_t msgh_body;
+    mach_msg_port_descriptor_t session_port;
     NDR_record_t ndr;
-    mach_msg_body_t body;
-    mach_msg_port_descriptor_t send_port;
     uint32_t ver_major;
     uint32_t ver_minor;
-    uint32_t login;
+    uint8_t login;
+    uint8_t login_pad[3];
     mach_msg_trailer_t trailer;
 } SkylightResp;
 
@@ -54,6 +54,22 @@ typedef union {
     SkylightReq req;
     SkylightResp resp;
 } SkylightMsg;
+
+static void dump_msg_body(const mach_msg_body_t *body) {
+    printf("mach_msg_body_t @ %p\n", body);
+    printf("    msgh_descriptor_count: %u\n", body->msgh_descriptor_count);
+    fflush(stdout);
+}
+
+static void dump_msg_port_desc(const mach_msg_port_descriptor_t *desc) {
+    printf("mach_msg_port_descriptor_t @ %p\n", desc);
+    printf("    name: 0x%08x %u\n", desc->name, desc->name);
+    printf("    pad1: %u\n", desc->pad1);
+    printf("    pad2: %u\n", desc->pad2);
+    printf("    disposition: %u\n", desc->disposition);
+    printf("    type: %u\n", desc->type);
+    fflush(stdout);
+}
 
 // https://gist.github.com/ccbrown/9722406
 __attribute__((unused)) static void hexdump(const void *data, size_t size) {
@@ -171,28 +187,27 @@ int main(int argc, const char *argv[]) {
     memset(&send_msg, 0, sizeof(send_msg));
 
     // Set up the message header
-    send_msg.req.header.msgh_bits =
-        MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND);
-    send_msg.req.header.msgh_size        = sizeof(send_msg.req);
-    send_msg.req.header.msgh_remote_port = service_port;
-    send_msg.req.header.msgh_local_port  = hot_reply_port;
-    send_msg.req.header.msgh_id          = 29000; // get version
+    send_msg.req.head.msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND);
+    send_msg.req.head.msgh_size = sizeof(send_msg.req);
+    send_msg.req.head.msgh_remote_port = service_port;
+    send_msg.req.head.msgh_local_port  = hot_reply_port;
+    send_msg.req.head.msgh_id          = 29000; // get version
 
     printf("Sending message to WindowServer...\n");
-    printf("Send bits pre mach_msg: 0x%08x\n", send_msg.req.header.msgh_bits);
-    printf("Send Length pre mach_msg: %u\n", send_msg.req.header.msgh_size);
+    printf("Send bits pre mach_msg: 0x%08x\n", send_msg.req.head.msgh_bits);
+    printf("Send Length pre mach_msg: %u\n", send_msg.req.head.msgh_size);
 
     mach_port_t cool_reply_port = mig_get_reply_port();
     printf("cool_reply_port: 0x%08x %u\n", cool_reply_port, cool_reply_port);
     assert(cool_reply_port != MACH_PORT_NULL);
 
-    printf("req: sz: %u sizeof(): %zu\n", send_msg.req.header.msgh_size, sizeof(send_msg.req));
+    printf("req: sz: %u sizeof(): %zu\n", send_msg.req.head.msgh_size, sizeof(send_msg.req));
     hexdump(&send_msg.req, sizeof(send_msg.req));
     assert(sizeof(send_msg.req) % sizeof(uint32_t) == 0);
     hexdump32((uint32_t *)&send_msg.req, sizeof(send_msg.req) / sizeof(uint32_t));
 
     // Send the message
-    kr = mach_msg(&send_msg.req.header, // Message buffer
+    kr = mach_msg(&send_msg.req.head, // Message buffer
                   MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT, // Options
                   sizeof(send_msg.req),  // Send size - must be >= 24
                   sizeof(send_msg.resp), // Receive limit - must be >= 68
@@ -201,19 +216,21 @@ int main(int argc, const char *argv[]) {
                   MACH_PORT_NULL);       // Notification port
     printf("mach_msg returned %d '%s'\n", kr, mach_error_string(kr));
     printf("Send retcode post mach_msg: 0x%08x\n", ((mig_reply_error_t *)&send_msg.req)->RetCode);
-    printf("Send bits post mach_msg: 0x%08x\n", send_msg.req.header.msgh_bits);
-    printf("Send Length post mach_msg: %u\n", send_msg.req.header.msgh_size);
+    printf("Send bits post mach_msg: 0x%08x\n", send_msg.req.head.msgh_bits);
+    printf("Send Length post mach_msg: %u\n", send_msg.req.head.msgh_size);
     printf("send_msg.ver_major %u ver_minor: %u\n", send_msg.resp.ver_major,
            send_msg.resp.ver_minor);
     printf("send_msg.login %u\n", send_msg.resp.login & 0xff);
-    printf("resp: sz: %u\n", send_msg.resp.header.msgh_size);
+    printf("resp: sz: %u\n", send_msg.resp.head.msgh_size);
     hexdump(&send_msg.resp, sizeof(send_msg.resp));
     assert(sizeof(send_msg.resp) % sizeof(uint32_t) == 0);
     hexdump32((uint32_t *)&send_msg.resp, sizeof(send_msg.resp) / sizeof(uint32_t));
-    printf("hexdump32 just %u instead of %zu\n", send_msg.resp.header.msgh_size,
+    printf("hexdump32 just %u instead of %zu\n", send_msg.resp.head.msgh_size,
            sizeof(send_msg.resp));
-    assert(send_msg.resp.header.msgh_size % sizeof(uint32_t) == 0);
-    hexdump32((uint32_t *)&send_msg.resp, send_msg.resp.header.msgh_size / sizeof(uint32_t));
+    assert(send_msg.resp.head.msgh_size % sizeof(uint32_t) == 0);
+    hexdump32((uint32_t *)&send_msg.resp, send_msg.resp.head.msgh_size / sizeof(uint32_t));
+    dump_msg_body(&send_msg.resp.msgh_body);
+    dump_msg_port_desc(&send_msg.resp.session_port);
 
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to send phase A message: %s\n", mach_error_string(kr));
