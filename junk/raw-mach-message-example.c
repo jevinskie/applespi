@@ -40,10 +40,10 @@ _Static_assert(sizeof(SkylightReq) == 24, "req msg size");
 typedef struct {
     mach_msg_header_t header;
     NDR_record_t ndr;
-    uint32_t ver_major;
-    uint32_t ver_minor;
     mach_msg_body_t body;
     mach_msg_port_descriptor_t send_port;
+    uint32_t ver_major;
+    uint32_t ver_minor;
     uint32_t login;
     mach_msg_trailer_t trailer;
 } SkylightResp;
@@ -205,6 +205,7 @@ int main(int argc, const char *argv[]) {
     printf("Send Length post mach_msg: %u\n", send_msg.req.header.msgh_size);
     printf("send_msg.ver_major %u ver_minor: %u\n", send_msg.resp.ver_major,
            send_msg.resp.ver_minor);
+    printf("send_msg.login %u\n", send_msg.resp.login & 0xff);
     printf("resp: sz: %u\n", send_msg.resp.header.msgh_size);
     hexdump(&send_msg.resp, sizeof(send_msg.resp));
     assert(sizeof(send_msg.resp) % sizeof(uint32_t) == 0);
