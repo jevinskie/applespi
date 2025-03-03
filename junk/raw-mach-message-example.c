@@ -1,3 +1,4 @@
+#include <_types/_uint32_t.h>
 #include <mach/message.h>
 #include <sys/_types/_mach_port_t.h>
 #undef NDEBUG
@@ -60,6 +61,39 @@ __attribute__((unused)) static void hexdump(const void *data, size_t size) {
                 }
                 for (j = (i + 1) % 16; j < 16; ++j) {
                     printf("   ");
+                }
+                printf("|  %s \n", ascii);
+            }
+        }
+    }
+}
+
+__attribute__((unused)) static void hexdump32(const uint32_t *buf, size_t count) {
+    const void *data  = buf;
+    const size_t size = count * sizeof(uint32_t);
+    char ascii[17];
+    size_t i, j, w;
+    ascii[16] = '\0';
+    for (w = 0; w < count; ++w) {
+        printf("%08x ", buf[w]);
+        for (i = w * sizeof(uint32_t); i < (w + 1) * sizeof(uint32_t); ++i) {
+            if (((unsigned char *)data)[i] >= ' ' && ((unsigned char *)data)[i] <= '~') {
+                ascii[i % 16] = ((unsigned char *)data)[i];
+            } else {
+                ascii[i % 16] = '.';
+            }
+        }
+        if ((w + 1) % 2 == 0 || w + 1 == count) {
+            printf(" ");
+            if ((w + 1) % 4 == 0) {
+                printf("|  %s \n", ascii);
+            } else if (w + 1 == count) {
+                ascii[((w + 1) * sizeof(uint32_t)) % 16] = '\0';
+                if ((w + 1) % 4 <= 2) {
+                    printf("   ");
+                }
+                for (j = (w + 1) % 4; j < 4; ++j) {
+                    printf("        ");
                 }
                 printf("|  %s \n", ascii);
             }
@@ -146,6 +180,8 @@ int main(int argc, const char *argv[]) {
            send_msg.resp.ver_minor);
     printf("resp: sz: %u\n", send_msg.resp.header.msgh_size);
     hexdump(&send_msg.resp, sizeof(send_msg.resp));
+    assert(sizeof(send_msg.resp) % sizeof(uint32_t) == 0);
+    hexdump32((uint32_t *)&send_msg.resp, sizeof(send_msg.resp) / sizeof(uint32_t));
 
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to send phase A message: %s\n", mach_error_string(kr));
