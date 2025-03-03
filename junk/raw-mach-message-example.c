@@ -90,10 +90,13 @@ __attribute__((unused)) static void hexdump32(const uint32_t *buf, size_t count)
             } else if (w + 1 == count) {
                 ascii[((w + 1) * sizeof(uint32_t)) % 16] = '\0';
                 if ((w + 1) % 4 <= 2) {
-                    printf("   ");
+                    printf(" ");
+                    if ((w + 1) % 4 != 2) {
+                        printf("  ");
+                    }
                 }
                 for (j = (w + 1) % 4; j < 4; ++j) {
-                    printf("        ");
+                    printf("         ");
                 }
                 printf("|  %s \n", ascii);
             }
@@ -165,6 +168,11 @@ int main(int argc, const char *argv[]) {
     mach_port_t cool_reply_port = mig_get_reply_port();
     printf("cool_reply_port: 0x%08x %u\n", cool_reply_port, cool_reply_port);
     assert(cool_reply_port != MACH_PORT_NULL);
+
+    printf("req: sz: %u sizeof(): %zu\n", send_msg.req.header.msgh_size, sizeof(send_msg.req));
+    hexdump(&send_msg.req, sizeof(send_msg.req));
+    assert(sizeof(send_msg.req) % sizeof(uint32_t) == 0);
+    hexdump32((uint32_t *)&send_msg.req, sizeof(send_msg.req) / sizeof(uint32_t));
 
     // Send the message
     kr = mach_msg(&send_msg.req.header, // Message buffer
