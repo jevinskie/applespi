@@ -37,6 +37,36 @@ typedef union {
     SkylightResp resp;
 } SkylightMsg;
 
+// https://gist.github.com/ccbrown/9722406
+__attribute__((unused)) static void hexdump(const void *data, size_t size) {
+    char ascii[17];
+    size_t i, j;
+    ascii[16] = '\0';
+    for (i = 0; i < size; ++i) {
+        printf("%02X ", ((unsigned char *)data)[i]);
+        if (((unsigned char *)data)[i] >= ' ' && ((unsigned char *)data)[i] <= '~') {
+            ascii[i % 16] = ((unsigned char *)data)[i];
+        } else {
+            ascii[i % 16] = '.';
+        }
+        if ((i + 1) % 8 == 0 || i + 1 == size) {
+            printf(" ");
+            if ((i + 1) % 16 == 0) {
+                printf("|  %s \n", ascii);
+            } else if (i + 1 == size) {
+                ascii[(i + 1) % 16] = '\0';
+                if ((i + 1) % 16 <= 8) {
+                    printf(" ");
+                }
+                for (j = (i + 1) % 16; j < 16; ++j) {
+                    printf("   ");
+                }
+                printf("|  %s \n", ascii);
+            }
+        }
+    }
+}
+
 int main(int argc, const char *argv[]) {
     kern_return_t kr;
     mach_port_t bootstrap_port;
@@ -65,7 +95,6 @@ int main(int argc, const char *argv[]) {
 
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to allocate reply port: %s\n", mach_error_string(kr));
-        mach_port_deallocate(mach_task_self(), service_port);
         return 1;
     }
     printf("reply_port: 0x%08x %u\n", reply_port, reply_port);
@@ -75,8 +104,6 @@ int main(int argc, const char *argv[]) {
 
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to insert right for reply port: %s\n", mach_error_string(kr));
-        mach_port_deallocate(mach_task_self(), reply_port);
-        mach_port_deallocate(mach_task_self(), service_port);
         return 1;
     }
 
@@ -97,18 +124,6 @@ int main(int argc, const char *argv[]) {
     send_msg.req.header.msgh_local_port  = hot_reply_port;
     send_msg.req.header.msgh_id          = 29000; // get version
 
-    // Set up the message body
-    // send_msg.body.msgh_descriptor_count = 1;
-
-    // Include a port descriptor (needed for some system services)
-    // send_msg.descriptor.name        = mach_task_self();
-    // send_msg.descriptor.disposition = MACH_MSG_TYPE_COPY_SEND;
-    // send_msg.descriptor.type        = MACH_MSG_PORT_DESCRIPTOR;
-
-    // Include a message ID and some data
-    // send_msg.id = 42; // Arbitrary message ID
-    // strcpy((char *)send_msg.data, "Hello WindowServer");
-
     printf("Sending message to WindowServer...\n");
     printf("Send bits pre mach_msg: 0x%08x\n", send_msg.req.header.msgh_bits);
     printf("Send Length pre mach_msg: %u\n", send_msg.req.header.msgh_size);
@@ -127,44 +142,17 @@ int main(int argc, const char *argv[]) {
                   MACH_PORT_NULL);       // Notification port
     printf("Send bits post mach_msg: 0x%08x\n", send_msg.req.header.msgh_bits);
     printf("Send Length post mach_msg: %u\n", send_msg.req.header.msgh_size);
+    printf("send_msg.ver_major %u ver_minor: %u\n", send_msg.resp.ver_major,
+           send_msg.resp.ver_minor);
+    printf("resp: sz: %u\n", send_msg.resp.header.msgh_size);
+    hexdump(&send_msg.resp, sizeof(send_msg.resp));
 
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to send phase A message: %s\n", mach_error_string(kr));
-        mach_port_deallocate(mach_task_self(), reply_port);
-        mach_port_deallocate(mach_task_self(), service_port);
         return 1;
     }
 
     printf("Message sent successfully.\n");
-    printf("Waiting for response...\n");
-
-    // Prepare a buffer for the response
-    SkylightMsg recv_msg = {};
-    memset(&recv_msg, 0, sizeof(recv_msg));
-
-    // Receive a message
-    kr = mach_msg(&recv_msg.resp.header, // Message buffer
-                  MACH_RCV_MSG | MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
-                      MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT), // Options
-                  0,                                                     // Send size
-                  sizeof(recv_msg.resp), // Receive limit - must be >= 88
-                  reply_port,            // Receive port
-                  1000,                  // Timeout (1 second)
-                  MACH_PORT_NULL);       // Notification port
-
-    if (kr == MACH_RCV_TIMEOUT) {
-        printf("No response received within timeout.\n");
-    } else if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "Error receiving phase B message: %s\n", mach_error_string(kr));
-    } else {
-        printf("Received response from port 0x%08x %u\n", recv_msg.resp.header.msgh_remote_port,
-               recv_msg.resp.header.msgh_remote_port);
-        printf("Length: %u\n", recv_msg.resp.header.msgh_size);
-    }
-
-    // Clean up
-    mach_port_deallocate(mach_task_self(), reply_port);
-    mach_port_deallocate(mach_task_self(), service_port);
 
     return 0;
 }
