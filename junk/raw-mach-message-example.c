@@ -1,3 +1,5 @@
+#include <_types/_uint32_t.h>
+#include <mach/message.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -45,10 +47,12 @@ typedef struct {
     uint32_t ver_minor;
     uint8_t login;
     uint8_t login_pad[3];
-    mach_msg_trailer_t trailer;
+    mach_msg_audit_trailer_t trailer;
 } SkylightResp;
 
-_Static_assert(sizeof(SkylightResp) == 68, "resp msg size");
+_Static_assert(sizeof(SkylightResp) == 68 + sizeof(mach_port_seqno_t) + sizeof(security_token_t) +
+                                           sizeof(audit_token_t),
+               "resp msg size");
 
 typedef union {
     SkylightReq req;
@@ -68,6 +72,38 @@ static void dump_msg_port_desc(const mach_msg_port_descriptor_t *desc) {
     printf("    pad2: %u\n", desc->pad2);
     printf("    disposition: %u\n", desc->disposition);
     printf("    type: %u\n", desc->type);
+    fflush(stdout);
+}
+
+static void dump_msg_audit_trailer(const mach_msg_audit_trailer_t *trailer) {
+    printf("mach_msg_audit_trailer_t @ %p\n", trailer);
+    printf("mach_msg_trailer_type_t  msgh_trailer_type: 0x%08x\n", trailer->msgh_trailer_type);
+    printf("mach_msg_trailer_size_t  msgh_trailer_size: 0x%08x %u\n", trailer->msgh_trailer_size,
+           trailer->msgh_trailer_size);
+    printf("mach_port_seqno_t        msgh_seqno: 0x%08x %u\n", trailer->msgh_seqno,
+           trailer->msgh_seqno);
+    printf("security_token_t         msgh_sender: @ %p\n", &trailer->msgh_sender);
+    printf("security_token_t             msgh_sender[0]: UID 0x%08x %u\n",
+           trailer->msgh_sender.val[0], trailer->msgh_sender.val[0]);
+    printf("security_token_t             msgh_sender[1]: GID 0x%08x %u\n",
+           trailer->msgh_sender.val[1], trailer->msgh_sender.val[1]);
+    printf("audit_token_t            msgh_audit: @ %p\n", &trailer->msgh_audit);
+    printf("audit_token_t                msgh_audit[0]: AuditUID 0x%08x %u\n",
+           trailer->msgh_audit.val[0], trailer->msgh_audit.val[0]);
+    printf("audit_token_t                msgh_audit[1]: EUID 0x%08x %u\n",
+           trailer->msgh_audit.val[1], trailer->msgh_audit.val[1]);
+    printf("audit_token_t                msgh_audit[2]: EGID 0x%08x %u\n",
+           trailer->msgh_audit.val[2], trailer->msgh_audit.val[2]);
+    printf("audit_token_t                msgh_audit[3]: RUID 0x%08x %u\n",
+           trailer->msgh_audit.val[3], trailer->msgh_audit.val[3]);
+    printf("audit_token_t                msgh_audit[4]: RGID 0x%08x %u\n",
+           trailer->msgh_audit.val[4], trailer->msgh_audit.val[4]);
+    printf("audit_token_t                msgh_audit[5]: PID 0x%08x %u\n",
+           trailer->msgh_audit.val[5], trailer->msgh_audit.val[5]);
+    printf("audit_token_t                msgh_audit[6]: AuditSessionID 0x%08x %u\n",
+           trailer->msgh_audit.val[6], trailer->msgh_audit.val[6]);
+    printf("audit_token_t                msgh_audit[7]: PID Version 0x%08x %u\n",
+           trailer->msgh_audit.val[7], trailer->msgh_audit.val[7]);
     fflush(stdout);
 }
 
@@ -208,7 +244,9 @@ int main(int argc, const char *argv[]) {
 
     // Send the message
     kr = mach_msg(&send_msg.req.head, // Message buffer
-                  MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT, // Options
+                  MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT |
+                      MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+                      MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT), // Options
                   sizeof(send_msg.req),  // Send size - must be >= 24
                   sizeof(send_msg.resp), // Receive limit - must be >= 68
                   hot_reply_port,        // Receive port
@@ -231,6 +269,7 @@ int main(int argc, const char *argv[]) {
     hexdump32((uint32_t *)&send_msg.resp, send_msg.resp.head.msgh_size / sizeof(uint32_t));
     dump_msg_body(&send_msg.resp.msgh_body);
     dump_msg_port_desc(&send_msg.resp.session_port);
+    dump_msg_audit_trailer(&send_msg.resp.trailer);
 
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to send phase A message: %s\n", mach_error_string(kr));
