@@ -1,3 +1,7 @@
+#include <mach/message.h>
+#undef NDEBUG
+#include <assert.h>
+
 #include <mach/mach.h>
 #include <servers/bootstrap.h>
 #include <stdio.h>
@@ -7,11 +11,25 @@
 // Define message structure for communicating with the WindowServer
 typedef struct {
     mach_msg_header_t header;
-    mach_msg_body_t body;
-    mach_msg_port_descriptor_t descriptor;
-    uint32_t id;
-    uint8_t data[128];
-} WindowServerMessage;
+} SkylightReq;
+
+_Static_assert(sizeof(SkylightReq) == 24, "req msg size");
+
+typedef struct {
+    mach_msg_header_t header;
+    NDR_record_t ndr;
+    uint32_t ver_major;
+    uint32_t ver_minor;
+    mach_msg_port_descriptor_t desc;
+    mach_msg_trailer_t trailer;
+} SkylightResp;
+
+_Static_assert(sizeof(SkylightResp) == 60, "resp msg size");
+
+typedef union {
+    SkylightReq req;
+    SkylightResp resp;
+} SkylightMsg;
 
 int main(int argc, const char *argv[]) {
     kern_return_t kr;
@@ -33,7 +51,8 @@ int main(int argc, const char *argv[]) {
         return 1;
     }
 
-    printf("Successfully connected to WindowServer service (port: %u)\n", service_port);
+    printf("Successfully connected to WindowServer service (port: 0x%08x %u)\n", service_port,
+           service_port);
 
     // Create a reply port for receiving responses
     kr = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &reply_port);
@@ -43,6 +62,7 @@ int main(int argc, const char *argv[]) {
         mach_port_deallocate(mach_task_self(), service_port);
         return 1;
     }
+    printf("reply_port: 0x%08x %u)\n", reply_port, reply_port);
 
     // Insert a send right for the reply port
     kr = mach_port_insert_right(mach_task_self(), reply_port, reply_port, MACH_MSG_TYPE_MAKE_SEND);
@@ -56,40 +76,43 @@ int main(int argc, const char *argv[]) {
 
     // Prepare a message to send
     // This is a simplified example for WindowServer communication
-    WindowServerMessage send_msg = {0};
+    SkylightMsg send_msg = {};
+    memset(&send_msg, 0, sizeof(send_msg));
 
     // Set up the message header
-    send_msg.header.msgh_bits =
+    send_msg.req.header.msgh_bits =
         MACH_MSGH_BITS_COMPLEX | MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND);
-    send_msg.header.msgh_size        = sizeof(WindowServerMessage);
-    send_msg.header.msgh_remote_port = service_port;
-    send_msg.header.msgh_local_port  = reply_port;
-    send_msg.header.msgh_id          = 2001; // An arbitrary message ID for the WindowServer
+    send_msg.req.header.msgh_size        = sizeof(send_msg.req);
+    send_msg.req.header.msgh_remote_port = service_port;
+    send_msg.req.header.msgh_local_port  = reply_port;
+    send_msg.req.header.msgh_id          = 29000; // get version
 
     // Set up the message body
-    send_msg.body.msgh_descriptor_count = 1;
+    // send_msg.body.msgh_descriptor_count = 1;
 
     // Include a port descriptor (needed for some system services)
-    send_msg.descriptor.name        = mach_task_self();
-    send_msg.descriptor.disposition = MACH_MSG_TYPE_COPY_SEND;
-    send_msg.descriptor.type        = MACH_MSG_PORT_DESCRIPTOR;
+    // send_msg.descriptor.name        = mach_task_self();
+    // send_msg.descriptor.disposition = MACH_MSG_TYPE_COPY_SEND;
+    // send_msg.descriptor.type        = MACH_MSG_PORT_DESCRIPTOR;
 
     // Include a message ID and some data
-    send_msg.id = 42; // Arbitrary message ID
-    strcpy((char *)send_msg.data, "Hello WindowServer");
+    // send_msg.id = 42; // Arbitrary message ID
+    // strcpy((char *)send_msg.data, "Hello WindowServer");
 
     printf("Sending message to WindowServer...\n");
-    printf("Send Length pre mach_msg: %u\n", send_msg.header.msgh_size);
+    printf("Send bits pre mach_msg: 0x%08x\n", send_msg.req.header.msgh_bits);
+    printf("Send Length pre mach_msg: %u\n", send_msg.req.header.msgh_size);
 
     // Send the message
-    kr = mach_msg(&send_msg.header,          // Message buffer
-                  MACH_SEND_MSG,             // Options
-                  send_msg.header.msgh_size, // Send size
-                  0,                         // Receive limit
-                  MACH_PORT_NULL,            // Receive port
-                  MACH_MSG_TIMEOUT_NONE,     // Timeout
-                  MACH_PORT_NULL);           // Notification port
-    printf("Send Length post mach_msg: %u\n", send_msg.header.msgh_size);
+    kr = mach_msg(&send_msg.req.header,          // Message buffer
+                  MACH_SEND_MSG,                 // Options
+                  send_msg.req.header.msgh_size, // Send size
+                  0,                             // Receive limit
+                  MACH_PORT_NULL,                // Receive port
+                  MACH_MSG_TIMEOUT_NONE,         // Timeout
+                  MACH_PORT_NULL);               // Notification port
+    printf("Send bits post mach_msg: 0x%08x\n", send_msg.req.header.msgh_bits);
+    printf("Send Length post mach_msg: %u\n", send_msg.req.header.msgh_size);
 
     if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Failed to send message: %s\n", mach_error_string(kr));
@@ -102,14 +125,15 @@ int main(int argc, const char *argv[]) {
     printf("Waiting for response...\n");
 
     // Prepare a buffer for the response
-    WindowServerMessage recv_msg = {0};
+    SkylightMsg recv_msg = {};
+    memset(&recv_msg, 0, sizeof(recv_msg));
 
     // Receive a message
-    kr = mach_msg(&recv_msg.header, // Message buffer
+    kr = mach_msg(&recv_msg.resp.header, // Message buffer
                   MACH_RCV_MSG | MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
                       MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT), // Options
                   0,                                                     // Send size
-                  sizeof(WindowServerMessage),                           // Receive limit
+                  sizeof(recv_msg.resp),                                 // Receive limit
                   reply_port,                                            // Receive port
                   1000,                                                  // Timeout (1 second)
                   MACH_PORT_NULL);                                       // Notification port
@@ -119,10 +143,9 @@ int main(int argc, const char *argv[]) {
     } else if (kr != KERN_SUCCESS) {
         fprintf(stderr, "Error receiving message: %s\n", mach_error_string(kr));
     } else {
-        printf("Received response from port %u\n", recv_msg.header.msgh_remote_port);
-        printf("Message ID: %u\n", recv_msg.id);
-        printf("Length: %u\n", recv_msg.header.msgh_size);
-        printf("Data: %s\n", recv_msg.data);
+        printf("Received response from port 0x%08x %u\n", recv_msg.resp.header.msgh_remote_port,
+               recv_msg.resp.header.msgh_remote_port);
+        printf("Length: %u\n", recv_msg.resp.header.msgh_size);
     }
 
     // Clean up

@@ -85,8 +85,8 @@ void receive_notification(void) {
 
     // Clean up
     mach_port_deallocate(mach_task_self(), service_port);
-    mach_port_destroy(mach_task_self(), receive_port);
-    mach_port_destroy(mach_task_self(), port_set);
+    mach_port_deallocate(mach_task_self(), receive_port);
+    mach_port_deallocate(mach_task_self(), port_set);
 }
 
 int main(int argc, const char *argv[]) {
