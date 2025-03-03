@@ -1,4 +1,5 @@
 #include <mach/message.h>
+#include <sys/_types/_mach_port_t.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -11,20 +12,25 @@
 // Define message structure for communicating with the WindowServer
 typedef struct {
     mach_msg_header_t header;
+    mach_port_t server_port_maybe;
 } SkylightReq;
 
-_Static_assert(sizeof(SkylightReq) == 24, "req msg size");
+_Static_assert(sizeof(SkylightReq) == 28, "req msg size");
 
 typedef struct {
     mach_msg_header_t header;
     NDR_record_t ndr;
     uint32_t ver_major;
     uint32_t ver_minor;
-    mach_msg_port_descriptor_t desc;
-    mach_msg_trailer_t trailer;
+    mach_msg_body_t body;
+    mach_msg_body_t body_pad;
+    mach_msg_body_t body_pad_pad;
+    mach_msg_port_descriptor_t send_port;
+    uint32_t login;
+    mach_msg_security_trailer_t trailer;
 } SkylightResp;
 
-_Static_assert(sizeof(SkylightResp) == 60, "resp msg size");
+_Static_assert(sizeof(SkylightResp) == 88, "resp msg size");
 
 typedef union {
     SkylightReq req;
@@ -62,7 +68,7 @@ int main(int argc, const char *argv[]) {
         mach_port_deallocate(mach_task_self(), service_port);
         return 1;
     }
-    printf("reply_port: 0x%08x %u)\n", reply_port, reply_port);
+    printf("reply_port: 0x%08x %u\n", reply_port, reply_port);
 
     // Insert a send right for the reply port
     kr = mach_port_insert_right(mach_task_self(), reply_port, reply_port, MACH_MSG_TYPE_MAKE_SEND);
@@ -74,6 +80,10 @@ int main(int argc, const char *argv[]) {
         return 1;
     }
 
+    mach_port_t hot_reply_port = mig_get_reply_port();
+    printf("hot_reply_port: 0x%08x %u\n", hot_reply_port, hot_reply_port);
+    assert(hot_reply_port != MACH_PORT_NULL);
+
     // Prepare a message to send
     // This is a simplified example for WindowServer communication
     SkylightMsg send_msg = {};
@@ -84,7 +94,7 @@ int main(int argc, const char *argv[]) {
         MACH_MSGH_BITS_COMPLEX | MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND);
     send_msg.req.header.msgh_size        = sizeof(send_msg.req);
     send_msg.req.header.msgh_remote_port = service_port;
-    send_msg.req.header.msgh_local_port  = reply_port;
+    send_msg.req.header.msgh_local_port  = hot_reply_port;
     send_msg.req.header.msgh_id          = 29000; // get version
 
     // Set up the message body
@@ -103,19 +113,25 @@ int main(int argc, const char *argv[]) {
     printf("Send bits pre mach_msg: 0x%08x\n", send_msg.req.header.msgh_bits);
     printf("Send Length pre mach_msg: %u\n", send_msg.req.header.msgh_size);
 
+    mach_port_t cool_reply_port = mig_get_reply_port();
+    printf("cool_reply_port: 0x%08x %u\n", cool_reply_port, cool_reply_port);
+    assert(cool_reply_port != MACH_PORT_NULL);
+
     // Send the message
-    kr = mach_msg(&send_msg.req.header,          // Message buffer
-                  MACH_SEND_MSG,                 // Options
-                  send_msg.req.header.msgh_size, // Send size
-                  0,                             // Receive limit
-                  MACH_PORT_NULL,                // Receive port
-                  MACH_MSG_TIMEOUT_NONE,         // Timeout
-                  MACH_PORT_NULL);               // Notification port
+    kr = mach_msg(&send_msg.req.header, // Message buffer
+                  MACH_SEND_MSG | MACH_RCV_MSG | MACH_SEND_TIMEOUT | MACH_RCV_TIMEOUT |
+                      MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
+                      MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT), // Options
+                  sizeof(send_msg.req),  // Send size - must be >= 28
+                  sizeof(send_msg.resp), // Receive limit
+                  hot_reply_port,        // Receive port
+                  1000,                  // Timeout
+                  MACH_PORT_NULL);       // Notification port
     printf("Send bits post mach_msg: 0x%08x\n", send_msg.req.header.msgh_bits);
     printf("Send Length post mach_msg: %u\n", send_msg.req.header.msgh_size);
 
     if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "Failed to send message: %s\n", mach_error_string(kr));
+        fprintf(stderr, "Failed to send phase A message: %s\n", mach_error_string(kr));
         mach_port_deallocate(mach_task_self(), reply_port);
         mach_port_deallocate(mach_task_self(), service_port);
         return 1;
@@ -133,15 +149,15 @@ int main(int argc, const char *argv[]) {
                   MACH_RCV_MSG | MACH_RCV_TRAILER_TYPE(MACH_MSG_TRAILER_FORMAT_0) |
                       MACH_RCV_TRAILER_ELEMENTS(MACH_RCV_TRAILER_AUDIT), // Options
                   0,                                                     // Send size
-                  sizeof(recv_msg.resp),                                 // Receive limit
-                  reply_port,                                            // Receive port
-                  1000,                                                  // Timeout (1 second)
-                  MACH_PORT_NULL);                                       // Notification port
+                  sizeof(recv_msg.resp), // Receive limit - must be >= 88
+                  reply_port,            // Receive port
+                  1000,                  // Timeout (1 second)
+                  MACH_PORT_NULL);       // Notification port
 
     if (kr == MACH_RCV_TIMEOUT) {
         printf("No response received within timeout.\n");
     } else if (kr != KERN_SUCCESS) {
-        fprintf(stderr, "Error receiving message: %s\n", mach_error_string(kr));
+        fprintf(stderr, "Error receiving phase B message: %s\n", mach_error_string(kr));
     } else {
         printf("Received response from port 0x%08x %u\n", recv_msg.resp.header.msgh_remote_port,
                recv_msg.resp.header.msgh_remote_port);
