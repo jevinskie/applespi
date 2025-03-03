@@ -1,5 +1,7 @@
 #include <_types/_uint32_t.h>
+#include <mach/arm/kern_return.h>
 #include <mach/message.h>
+#include <mach/ndr.h>
 #include <sys/_types/_mach_port_t.h>
 #undef NDEBUG
 #include <assert.h>
@@ -13,7 +15,7 @@
 // Define message structure for communicating with the WindowServer
 typedef struct {
     mach_msg_header_t header;
-    mach_port_t server_port_maybe;
+    kern_return_t result;
 } SkylightReq;
 
 _Static_assert(sizeof(SkylightReq) == 28, "req msg size");
@@ -182,6 +184,8 @@ int main(int argc, const char *argv[]) {
                   hot_reply_port,        // Receive port
                   1000,                  // Timeout
                   MACH_PORT_NULL);       // Notification port
+    printf("mach_msg returned %d '%s'\n", kr, mach_error_string(kr));
+    printf("Send retcode post mach_msg: 0x%08x\n", ((mig_reply_error_t *)&send_msg.req)->RetCode);
     printf("Send bits post mach_msg: 0x%08x\n", send_msg.req.header.msgh_bits);
     printf("Send Length post mach_msg: %u\n", send_msg.req.header.msgh_size);
     printf("send_msg.ver_major %u ver_minor: %u\n", send_msg.resp.ver_major,

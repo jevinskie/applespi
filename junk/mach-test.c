@@ -148,6 +148,12 @@ typedef struct {
     mach_msg_size_t msgv_rcv_size;
 } mach_msg_vector_t;
 
+typedef struct {
+    mach_msg_header_t Head;
+    NDR_record_t NDR;
+    kern_return_t RetCode;
+} mig_reply_error_duplicate_for_reference_t;
+
 typedef uint32_t _voucher_magic_t;
 typedef uint32_t _voucher_priority_t;
 typedef uint64_t firehose_activity_id_t;
