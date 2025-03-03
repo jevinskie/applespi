@@ -1,8 +1,3 @@
-#include <_types/_uint32_t.h>
-#include <mach/arm/kern_return.h>
-#include <mach/message.h>
-#include <mach/ndr.h>
-#include <sys/_types/_mach_port_t.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -15,10 +10,25 @@
 // Define message structure for communicating with the WindowServer
 typedef struct {
     mach_msg_header_t header;
-    kern_return_t result;
 } SkylightReq;
 
-_Static_assert(sizeof(SkylightReq) == 28, "req msg size");
+_Static_assert(sizeof(SkylightReq) == 24, "req msg size");
+
+// bad MIG_BAD_ARGUMENTS if COMPLEX (high bit) or size != 24
+// 00001100 00000024  00000000 00000707  |  ....$...........
+// 00000000 000071ac  00000000 00000001  |  .....q..........
+// fffffed0 00000000  00000008 00000000  |  ................
+// 00000000 00000000  00000000 00000000  |  ................
+// 00000000 00000000  00000000 00000000  |  ................
+// 00000000 00000000                     |  ........
+
+// better? retcode 0 but resp sz = 60? not 88
+// 80001100 0000003c  00000000 00000707  |  ....<...........
+// 00000000 000071ac  00000001 00000c03  |  .....q..........
+// 00000000 00110000  00000000 00000001  |  ................
+// 00000258 00000000  aaaaaa01 00000000  |  X...............
+// 00000008 00000000  00000000 00000000  |  ................
+// 00000000 00000000                     |  ........
 
 typedef struct {
     mach_msg_header_t header;
@@ -157,7 +167,7 @@ int main(int argc, const char *argv[]) {
 
     // Set up the message header
     send_msg.req.header.msgh_bits =
-        MACH_MSGH_BITS_COMPLEX | MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND);
+        MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, MACH_MSG_TYPE_MAKE_SEND);
     send_msg.req.header.msgh_size        = sizeof(send_msg.req);
     send_msg.req.header.msgh_remote_port = service_port;
     send_msg.req.header.msgh_local_port  = hot_reply_port;
