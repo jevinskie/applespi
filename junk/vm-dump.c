@@ -1,8 +1,9 @@
 #include <mach/mach_error.h>
 #include <mach/mach_init.h>
-#include <mach/machine/kern_return.h>
 #include <mach/task.h>
 #include <mach/vm_map.h>
+#include <mach/vm_prot.h>
+#include <mach/vm_region.h>
 #include <stdint.h>
 #include <stdio.h>
 
