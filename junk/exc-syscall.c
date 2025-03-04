@@ -1,4 +1,5 @@
 #include <mach/arm/boolean.h>
+#include <mach/exception_types.h>
 #include <mach/mach_traps.h>
 #undef NDEBUG
 #include <assert.h>
@@ -87,6 +88,10 @@ static void bad_trap_raw(void) {
                        : "cc");
 }
 
+// const uint32_t new_exc_mask = EXC_MASK_SYSCALL | EXC_MASK_MACH_SYSCALL | EXC_MASK_SOFTWARE |
+// EXC_MASK_BREAKPOINT | EXC_MASK_BAD_INSTRUCTION | EXC_MASK_BAD_ACCESS | EXC_MASK_ALL;
+const uint32_t new_exc_mask = EXC_MASK_SYSCALL;
+
 int main(void) {
     const task_port_t self_task          = mach_task_self();
     mach_msg_type_number_t old_exc_count = 1;
@@ -98,12 +103,11 @@ int main(void) {
     assert(!mach_port_allocate(self_task, MACH_PORT_RIGHT_RECEIVE, &new_exc_port));
     assert(!mach_port_insert_right(self_task, new_exc_port, new_exc_port, MACH_MSG_TYPE_MAKE_SEND));
     const kern_return_t kr_get_exc =
-        task_get_exception_ports(self_task, EXC_MASK_MACH_SYSCALL, &old_exc_mask, &old_exc_count,
+        task_get_exception_ports(self_task, EXC_MASK_SYSCALL, &old_exc_mask, &old_exc_count,
                                  &orig_exc_port, &orig_exc_behavior, &orig_exc_flavor);
-    assert(!task_set_exception_ports(
-        self_task, EXC_MASK_MACH_SYSCALL, new_exc_port,
-        (exception_behavior_t)(EXCEPTION_STATE_IDENTITY | MACH_EXCEPTION_CODES),
-        ARM_THREAD_STATE64));
+    assert(!task_set_exception_ports(self_task, EXC_MASK_SYSCALL, new_exc_port,
+                                     (exception_behavior_t)(MACH_EXCEPTION_CODES),
+                                     ARM_EXCEPTION_STATE64));
     run_exception_handler(new_exc_port);
     usleep(10000);
     fprintf(stderr, "switch_pri(0)\n");
