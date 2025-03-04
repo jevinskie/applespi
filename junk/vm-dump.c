@@ -36,12 +36,10 @@ int main() {
                (info.protection & VM_PROT_WRITE) ? 'w' : '-',
                (info.protection & VM_PROT_EXECUTE) ? 'x' : '-');
 
-        // Print the region type
         if (info.is_submap) {
             depth += 1;
             printf("  Type: submap\n");
         } else {
-            // Determine region type based on other flags
             if (info.share_mode == SM_COW && info.external_pager) {
                 printf("  Type: mapped file\n");
             } else if (info.share_mode == SM_SHARED) {
@@ -55,7 +53,6 @@ int main() {
             }
         }
 
-        // Move to the next region
         address += size;
     }
     printf("address: 0x%lx VM_MAX_ADDRESS: 0x%lx address > VM_MAX_ADDRESS: %d\n", address,
