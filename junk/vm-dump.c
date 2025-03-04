@@ -1,10 +1,8 @@
-#include <mach-o/dyld.h>
-#include <mach/arm/vm_param.h>
-#include <mach/arm/vm_types.h>
-#include <mach/mach.h>
+#include <mach/mach_error.h>
+#include <mach/mach_init.h>
+#include <mach/machine/kern_return.h>
+#include <mach/task.h>
 #include <mach/vm_map.h>
-#include <mach/vm_region.h>
-#include <mach/vm_types.h>
 #include <stdint.h>
 #include <stdio.h>
 
