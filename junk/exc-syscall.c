@@ -1,3 +1,5 @@
+#include <mach/arm/boolean.h>
+#include <mach/mach_traps.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -67,6 +69,24 @@ static void run_exception_handler(mach_port_t exc_port) {
     assert(!pthread_detach(exc_thread));
 }
 
+static boolean_t switch_pri_raw(int pri) {
+    register int _pri_and_res __asm("w0") = pri;
+    __asm__ __volatile("mov x16, %[syscall_num]\n\t"
+                       "svc #0x80"
+                       : "+w"(_pri_and_res)
+                       : [syscall_num] "i"(-59), "w"(_pri_and_res)
+                       : "cc");
+    return _pri_and_res;
+}
+
+static void bad_trap_raw(void) {
+    __asm__ __volatile("mov x16, %[syscall_num]\n\t"
+                       "svc #0x80"
+                       :
+                       : [syscall_num] "i"(-133)
+                       : "cc");
+}
+
 int main(void) {
     const task_port_t self_task          = mach_task_self();
     mach_msg_type_number_t old_exc_count = 1;
@@ -78,14 +98,20 @@ int main(void) {
     assert(!mach_port_allocate(self_task, MACH_PORT_RIGHT_RECEIVE, &new_exc_port));
     assert(!mach_port_insert_right(self_task, new_exc_port, new_exc_port, MACH_MSG_TYPE_MAKE_SEND));
     const kern_return_t kr_get_exc =
-        task_get_exception_ports(self_task, EXC_MASK_BREAKPOINT, &old_exc_mask, &old_exc_count,
+        task_get_exception_ports(self_task, EXC_MASK_MACH_SYSCALL, &old_exc_mask, &old_exc_count,
                                  &orig_exc_port, &orig_exc_behavior, &orig_exc_flavor);
     assert(!task_set_exception_ports(
-        self_task, EXC_MASK_BREAKPOINT, new_exc_port,
+        self_task, EXC_MASK_MACH_SYSCALL, new_exc_port,
         (exception_behavior_t)(EXCEPTION_STATE_IDENTITY | MACH_EXCEPTION_CODES),
         ARM_THREAD_STATE64));
     run_exception_handler(new_exc_port);
     usleep(10000);
+    fprintf(stderr, "switch_pri(0)\n");
+    swtch_pri(0);
+    fprintf(stderr, "switch_pri_raw(0)\n");
+    switch_pri_raw(0);
+    fprintf(stderr, "bad_trap_raw()\n");
+    bad_trap_raw();
     __builtin_trap();
     return 0;
 }
