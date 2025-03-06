@@ -134,9 +134,9 @@ int main() {
         task_t child_self_task_kernel_port = MACH_PORT_NULL;
         kr =
             task_get_special_port(mach_task_self(), TASK_KERNEL_PORT, &child_self_task_kernel_port);
-        printf("child MACH_PORT_VALID(child_self_task_kernel_port): %d port: 0x%08x\n",
-               MACH_PORT_VALID(child_self_task_kernel_port), child_self_task_kernel_port);
-        if (KERN_SUCCESS != kr) {
+        printf("child MACH_PORT_VALID(child_self_task_kernel_port): %d port: 0x%08x kr: %d\n",
+               MACH_PORT_VALID(child_self_task_kernel_port), child_self_task_kernel_port, kr);
+        if (kr != KERN_SUCCESS) {
             mach_error("child task_get_special_port", kr);
             abort();
         }
