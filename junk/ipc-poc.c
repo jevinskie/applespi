@@ -1,3 +1,4 @@
+#include <mach/message.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -104,11 +105,14 @@ int main() {
     int kr;
     mach_port_t fake_bsp = MACH_PORT_NULL;
     kr                   = mach_port_allocate(mach_task_self(), MACH_PORT_RIGHT_RECEIVE, &fake_bsp);
+    printf("pre MACH_PORT_VALID(fake_bsp): %d port: 0x%08x\n", MACH_PORT_VALID(fake_bsp), fake_bsp);
     if (kr != KERN_SUCCESS) {
         mach_error("mach_port_allocate", kr);
         abort();
     }
     kr = mach_port_insert_right(mach_task_self(), fake_bsp, fake_bsp, MACH_MSG_TYPE_MAKE_SEND);
+    printf("pre post-mach_port_insert_right MACH_PORT_VALID(fake_bsp): %d port: 0x%08x\n",
+           MACH_PORT_VALID(fake_bsp), fake_bsp);
     if (kr != KERN_SUCCESS) {
         mach_error("mach_port_insert_right", kr);
         abort();
@@ -130,6 +134,8 @@ int main() {
         task_t child_self_task_kernel_port = MACH_PORT_NULL;
         kr =
             task_get_special_port(mach_task_self(), TASK_KERNEL_PORT, &child_self_task_kernel_port);
+        printf("child MACH_PORT_VALID(child_self_task_kernel_port): %d port: 0x%08x\n",
+               MACH_PORT_VALID(child_self_task_kernel_port), child_self_task_kernel_port);
         if (KERN_SUCCESS != kr) {
             mach_error("child task_get_special_port", kr);
             abort();
@@ -154,9 +160,10 @@ int main() {
         printf("child calling mach_msg_send(&pmsg.head)\n");
         fflush(stdout);
         kr = mach_msg_send(&pmsg.head);
-        printf("child MACH_PORT_VALID(fake_bsp): %d\n", MACH_PORT_VALID(fake_bsp));
-        printf("child MACH_PORT_VALID(child_self_task_kernel_port): %d\n",
-               MACH_PORT_VALID(child_self_task_kernel_port));
+        printf("child MACH_PORT_VALID(fake_bsp): %d port: 0x%08x\n", MACH_PORT_VALID(fake_bsp),
+               fake_bsp);
+        printf("child MACH_PORT_VALID(child_self_task_kernel_port): %d port: 0x%08x\n",
+               MACH_PORT_VALID(child_self_task_kernel_port), child_self_task_kernel_port);
         if (kr != KERN_SUCCESS) {
             mach_error("child mach_msg_send(&pmsg.header)", kr);
             abort();
@@ -165,6 +172,7 @@ int main() {
         sleep(1);
         printf("child done sleeping one, sent its port, sleeping for 5 seconds\n");
         fflush(stdout);
+        sleep(5);
         // send_message(port);
     } else if (pid > 0) {
         plog("I am the parent");
@@ -176,20 +184,22 @@ int main() {
             abort();
         }
         sleep(3);
-        struct port_msg parent_pmsg;
+        struct {
+            struct port_msg msg;
+            mach_msg_trailer_t trailer;
+        } parent_pmsg;
         memset(&parent_pmsg, 0, sizeof(parent_pmsg));
 
-        kr = mach_msg(&parent_pmsg.head, MACH_RCV_MSG, 0,
-                      sizeof(struct port_msg) + sizeof(mach_msg_trailer_t), fake_bsp,
+        kr = mach_msg(&parent_pmsg.msg.head, MACH_RCV_MSG, 0, sizeof(parent_pmsg), fake_bsp,
                       MACH_MSG_TIMEOUT_NONE, MACH_PORT_NULL);
         printf("parent MACH_PORT_VALID(fake_bsp) post mach_msg: %d\n", MACH_PORT_VALID(fake_bsp));
+        mach_port_t parents_child_port = parent_pmsg.msg.port.name;
+        printf("parent MACH_PORT_VALID(parents_child_port): %d port: 0x%08x\n",
+               MACH_PORT_VALID(parents_child_port), parents_child_port);
         if (kr != KERN_SUCCESS) {
             mach_error("post fork parent mach_msg get port", kr);
             abort();
         }
-        mach_port_t parents_child_port = parent_pmsg.port.name;
-        printf("parent MACH_PORT_VALID(parents_child_port): %d port: 0x%08x\n",
-               MACH_PORT_VALID(parents_child_port), parents_child_port);
         assert(MACH_PORT_VALID(parents_child_port));
         // recv_message(port);
         wait(&pid);
