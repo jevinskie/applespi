@@ -1,10 +1,67 @@
+#include <unistd.h>
 #undef NDEBUG
 #include <assert.h>
 
+#include <CoreFoundation/CoreFoundation.h>
 #include <dispatch/dispatch.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <xpc/xpc.h>
+
+void *_Nonnull stream_filter_for_pid(pid_t pid, size_t *_Nullable sz) {
+    // <dict>
+    //     <key>pid</key> <!-- filter type -->
+    //     <dict>
+    //         <key>1</key> <!-- PID (as string) -->
+    //         <integer>0</integer> <!-- flags -->
+    //     </dict>
+    // </dict>
+
+    CFStringRef pidKey = CFStringCreateWithFormat(kCFAllocatorDefault, NULL, CFSTR("%d"), pid);
+    assert(pidKey);
+    CFNumberRef zeroFlag = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &(int){0});
+    assert(zeroFlag);
+
+    // Inner dictionary { "<pid>": 0 [, "<pid2>": <FLAGS>, ...] }
+    const void *pidKeys[]   = {pidKey};
+    const void *pidValues[] = {zeroFlag};
+    CFDictionaryRef pidDict =
+        CFDictionaryCreate(kCFAllocatorDefault, pidKeys, pidValues, 1,
+                           &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    assert(pidDict);
+
+    // Outer dictionary { "pid": { "<pid>": 0 } }
+    const void *rootKeys[]   = {CFSTR("pid")};
+    const void *rootValues[] = {pidDict};
+    CFDictionaryRef rootDict =
+        CFDictionaryCreate(kCFAllocatorDefault, rootKeys, rootValues, 1,
+                           &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    assert(rootDict);
+
+    CFDataRef plistData = CFPropertyListCreateData(kCFAllocatorDefault, rootDict,
+                                                   kCFPropertyListBinaryFormat_v1_0, 0, NULL);
+    assert(plistData);
+
+    CFRelease(pidKey);
+    CFRelease(zeroFlag);
+    CFRelease(pidDict);
+    CFRelease(rootDict);
+
+    const size_t plistBufSz = CFDataGetLength(plistData);
+    assert(plistBufSz);
+    void *plistBuf = malloc(CFDataGetLength(plistData));
+    assert(plistBuf);
+    memcpy(plistBuf, CFDataGetBytePtr(plistData), plistBufSz);
+    CFRelease(plistData);
+
+    if (sz) {
+        *sz = plistBufSz;
+    }
+
+    return plistBuf; // free me
+}
 
 static void connection_handler(xpc_connection_t xpc_con) {
     printf("connection_handler conn: %p desc: '%s'\n", xpc_con, xpc_copy_description(xpc_con));
@@ -41,46 +98,6 @@ int main(int argc, const char **argv) {
 
     pid_t pid = atoi(argv[1]);
 
-    uint8_t pid_filter_bplist[63] = {0x62, 0x70, 0x6C, 0x69, 0x73, 0x74, 0x30, 0x30, 0xD1, 0x01,
-                                     0x02, 0x53, 0x70, 0x69, 0x64, 0xd1, 0x03, 0x04, 0x50};
-    const size_t pid_decimal_ascii_sz_off = 18;
-    const size_t pid_decimal_ascii_off    = 19;
-
-    size_t num_digits = 0;
-    pid_t tpid        = pid;
-    while (tpid) {
-        tpid /= 10;
-        ++num_digits;
-    }
-    assert(num_digits <= 0xF);
-    printf("num_digits: %zu\n", num_digits);
-    pid_filter_bplist[pid_decimal_ascii_sz_off] |= num_digits;
-    tpid = pid;
-    for (size_t i = 0; i < num_digits; ++i) {
-        uint8_t d                                                     = tpid % 10;
-        pid_filter_bplist[pid_decimal_ascii_off + num_digits - 1 - i] = '0' + d;
-        tpid /= 10;
-    }
-    const size_t trailer_off                        = pid_decimal_ascii_off + num_digits;
-    pid_filter_bplist[trailer_off]                  = 0x10;
-    pid_filter_bplist[trailer_off + 1]              = 0x00;
-    pid_filter_bplist[trailer_off + 2]              = 0x08;
-    pid_filter_bplist[trailer_off + 3]              = 0x0b;
-    pid_filter_bplist[trailer_off + 4]              = 0x0f;
-    pid_filter_bplist[trailer_off + 5]              = 0x12;
-    pid_filter_bplist[trailer_off + 6]              = 0x13 + num_digits;
-    pid_filter_bplist[trailer_off + 6 + 6 + 1 + 0]  = 0x01;
-    pid_filter_bplist[trailer_off + 6 + 6 + +1 + 1] = 0x01;
-    // pid_filter_bplist[trailer_off + 6 + 6 + 2] = 0x01;
-    pid_filter_bplist[trailer_off + 6 + 6 + 3 + 7] = 0x05;
-    // pid_filter_bplist[trailer_off + 6 + 6 + 4 + 7] = 0x00;
-    pid_filter_bplist[trailer_off + 6 + 6 + 5 + 7 + 14] = trailer_off + 2;
-    const size_t pid_filter_bplist_sz                   = trailer_off + 6 + 6 + 5 + 7 + 15;
-    printf("pid_filter_bplist_sz: %zu\n", pid_filter_bplist_sz);
-    for (size_t i = 0; i < pid_filter_bplist_sz; ++i) {
-        printf("%02hhx\n", pid_filter_bplist[i]);
-    }
-
     const xpc_connection_t xpc_con =
         xpc_connection_create_mach_service("com.apple.diagnosticd", DISPATCH_TARGET_QUEUE_DEFAULT,
                                            XPC_CONNECTION_MACH_SERVICE_PRIVILEGED);
@@ -93,7 +110,17 @@ int main(int argc, const char **argv) {
     xpc_dictionary_set_uint64(start_req, "action", 3);
     xpc_dictionary_set_uint64(start_req, "flags", 0x800 | 0x2 | 0x1);
     xpc_dictionary_set_uint64(start_req, "types", 8);
-
+    if (pid >= 0) {
+        pid                       = getpid();
+        size_t filter_sz          = 0;
+        const uint8_t *filter_buf = stream_filter_for_pid(pid, &filter_sz);
+        assert(filter_buf);
+        assert(filter_sz);
+        for (size_t i = 0; i < filter_sz; ++i) {
+            printf("%02hhx\n", filter_buf[i]);
+        }
+        xpc_dictionary_set_data(start_req, "stream_filter", filter_buf, filter_sz);
+    }
     printf("con_send_obj obj: %p desc: '%s'\n", start_req, xpc_copy_description(start_req));
     xpc_connection_send_message(xpc_con, start_req);
     dispatch_main();
