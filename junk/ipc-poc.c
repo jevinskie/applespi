@@ -1,3 +1,4 @@
+#include <mach/mach_types.h>
 #include <mach/message.h>
 #undef NDEBUG
 #include <assert.h>
@@ -170,6 +171,10 @@ int main() {
         }
         // mach_port_deallocate(mach_task_self(), child_self_task_kernel_port);
         sleep(1);
+        task_port_t self_child_task;
+        task_for_pid(mach_task_self(), getpid(), &self_child_task);
+        printf("child MACH_PORT_VALID(self_child_task): %d port: 0x%08x\n",
+               MACH_PORT_VALID(self_child_task), self_child_task);
         printf("child done sleeping one, sent its port, sleeping for 5 seconds\n");
         fflush(stdout);
         sleep(5);
