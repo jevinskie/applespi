@@ -21,6 +21,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "../include/applespi/detail/cwisstable.h"
+
 // Configuration macros (can be redefined before including this header)
 #ifndef STRPOOL_INITIAL_CAPACITY
 #define STRPOOL_INITIAL_CAPACITY 64
@@ -42,6 +44,37 @@ typedef struct {
     size_t capacity;           // Number of buckets
     size_t count;              // Number of stored strings
 } strpool_t;
+
+#pragma mark cwisstables begin
+
+static inline void kConsedCstrPolicy_copy(void *dst, const void *src) {
+    *(const void **)dst = src;
+}
+
+static inline void kConsedCstrPolicy_dtor(void *val) {
+    (void)val;
+}
+
+static inline size_t kConsedCstrPolicy_hash(const void *val) {
+    const char *cstr         = (const char *)val;
+    CWISS_FxHash_State state = 0;
+    const size_t len         = strlen(cstr);
+    CWISS_FxHash_Write(&state, &len, sizeof(len));
+    CWISS_FxHash_Write(&state, cstr, len);
+    return state;
+}
+
+static inline bool kConsedCstrPolicy_eq(const void *a, const void *b) {
+    return a == b;
+}
+
+CWISS_DECLARE_NODE_MAP_POLICY(kCStrPolicy, const char *, float, (obj_copy, kConsedCstrPolicy_copy),
+                              (obj_dtor, kConsedCstrPolicy_dtor),
+                              (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq));
+
+CWISS_DECLARE_HASHSET_WITH(ConsedCstrTable, const char *, kCStrPolicy);
+
+#pragma mark cwisstables end
 
 // Global string pool instance
 static strpool_t _strpool = {0};
