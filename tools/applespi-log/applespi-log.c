@@ -1,4 +1,24 @@
-#include <alloca.h>
+#undef NDEBUG
+
+#include <Availability.h>
+
+#ifdef __SPI_AVAILABLE
+#undef __SPI_AVAILABLE
+#define __SPI_AVAILABLE 1
+#endif
+
+#ifdef __API_UNAVAILABLE
+#undef __API_UNAVAILABLE
+#define __API_UNAVAILABLE(...)
+#endif
+#include <malloc/_malloc_type.h>
+#undef __API_UNAVAILABLE
+#define __API_UNAVAILABLE(...)                                                              \
+    __API_UNAVAILABLE_GET_MACRO(__VA_ARGS__, __API_UNAVAILABLE8, __API_UNAVAILABLE7,        \
+                                __API_UNAVAILABLE6, __API_UNAVAILABLE5, __API_UNAVAILABLE4, \
+                                __API_UNAVAILABLE3, __API_UNAVAILABLE2, __API_UNAVAILABLE1, \
+                                __API_UNAVAILABLE0, 0)(__VA_ARGS__)
+
 #undef NDEBUG
 #include <assert.h>
 
@@ -18,6 +38,9 @@
 
 #include "applespi/detail/cwisstable.h"
 
+#define NODE_ALLOC_ID 0x7b18352ce0ee2cbfull
+#define SLOT_ALLOC_ID 0x330719b0a951b336ull
+
 struct subsys_cat_pair_s {
     const char *subsystem;
     const char *category;
@@ -36,6 +59,21 @@ struct consed_cstr_s {
 typedef struct consed_cstr_s consed_cstr_t;
 
 static inline size_t kConsedCstrPolicy_hash(const void *val);
+
+static inline void *kConsedCstrPolicy_alloc(size_t size, size_t align) {
+    (void)align;
+    printf("alloc sz: %zu align: %zu\n", size, align);
+    void *p = malloc_type_aligned_alloc(align, size, NODE_ALLOC_ID);
+    printf("alloc p: %p\n", p);
+    assert(p);
+    return p;
+}
+
+static inline void kConsedCstrPolicy_free(void *array, size_t size, size_t align) {
+    (void)size;
+    (void)align;
+    free(array);
+}
 
 static inline consed_cstr_t *make_consd_cstr(const char *cstr) {
     assert(cstr);
