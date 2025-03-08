@@ -62,17 +62,19 @@ static inline size_t kConsedCstrPolicy_hash(const void *val);
 
 static inline void *kConsedCstrPolicy_alloc(size_t size, size_t align) {
     (void)align;
-    printf("alloc sz: %zu align: %zu\n", size, align);
+    // printf("alloc sz: %zu align: %zu\n", size, align);
     void *p = malloc_type_aligned_alloc(align, size, NODE_ALLOC_ID);
-    printf("alloc p: %p\n", p);
+    // printf("alloc p: %p\n", p);
+    printf("alloc p: %p sz: %zu align: %zu\n", p, size, align);
     assert(p);
     return p;
 }
 
-static inline void kConsedCstrPolicy_free(void *array, size_t size, size_t align) {
+static inline void kConsedCstrPolicy_free(void *val, size_t size, size_t align) {
+    printf("free p: %p sz: %zu align: %zu\n", val, size, align);
     (void)size;
     (void)align;
-    free(array);
+    malloc_type_free(val, NODE_ALLOC_ID);
 }
 
 static inline consed_cstr_t *make_consd_cstr(const char *cstr) {
@@ -205,7 +207,9 @@ static inline bool kConsedCstrPolicy_eq(const void *a, const void *b) {
 CWISS_DECLARE_NODE_SET_POLICY(kConsedCstrPolicy, consed_cstr_t *,
                               (obj_copy, kConsedCstrPolicy_copy),
                               (obj_dtor, kConsedCstrPolicy_dtor),
-                              (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq));
+                              (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq),
+                              (alloc_alloc, kConsedCstrPolicy_alloc),
+                              (alloc_free, kConsedCstrPolicy_free));
 
 CWISS_DECLARE_HASHSET_WITH(ConsedCstrSet, consed_cstr_t *, kConsedCstrPolicy);
 
