@@ -50,6 +50,7 @@ typedef struct {
 #pragma mark cwisstables begin
 
 static inline void kConsedCstrPolicy_copy(void *dst, const void *src) {
+    printf("copy: dst: %p src: %p dst: 'n/a' src: '%s'\n", dst, src, (char *)src);
     assert(src);
     assert(dst);
     const char *src_cstr = (const char *)src;
@@ -58,14 +59,17 @@ static inline void kConsedCstrPolicy_copy(void *dst, const void *src) {
     assert(dst_cstr);
     memcpy(dst_cstr, src_cstr, bytesz);
     *(char **)dst = dst_cstr;
+    printf("copy end: dst: %p src: %p dst: '%s' src: '%s'\n", dst, src, (char *)dst, (char *)src);
 }
 
 static inline void kConsedCstrPolicy_dtor(void *val) {
+    printf("dtor: val: %p val: '%s'\n", val, (char *)val);
     assert(val);
     free(val);
 }
 
 static inline size_t kConsedCstrPolicy_hash(const void *val) {
+    printf("hash: val: %p val: '%s'\n", val, (char *)val);
     const char *cstr         = (const char *)val;
     CWISS_FxHash_State state = 0;
     const size_t len         = strlen(cstr);
@@ -75,15 +79,15 @@ static inline size_t kConsedCstrPolicy_hash(const void *val) {
 }
 
 static inline bool kConsedCstrPolicy_eq(const void *a, const void *b) {
+    printf("eq: a: %p b: %p a: '%s' b: '%s'\n", a, b, (char *)a, (char *)b);
     return a == b;
 }
 
-CWISS_DECLARE_NODE_MAP_POLICY(kConsedCstrPolicy, const char *, const char *,
-                              (obj_copy, kConsedCstrPolicy_copy),
+CWISS_DECLARE_FLAT_SET_POLICY(kConsedCstrPolicy, char *, (obj_copy, kConsedCstrPolicy_copy),
                               (obj_dtor, kConsedCstrPolicy_dtor),
                               (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq));
 
-CWISS_DECLARE_HASHSET_WITH(ConsedCstrTable, const char *, kConsedCstrPolicy);
+CWISS_DECLARE_HASHSET_WITH(ConsedCstrSet, const char *, kConsedCstrPolicy);
 
 #pragma mark cwisstables end
 

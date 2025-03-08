@@ -26,6 +26,41 @@ typedef struct subsys_cat_pair_s subsys_cat_pair_t;
 
 CWISS_DECLARE_FLAT_HASHSET(SCPairSet, subsys_cat_pair_t);
 
+static inline void kConsedCstrPolicy_copy(void *dst, const void *src) {
+    assert(src);
+    assert(dst);
+    const char *src_cstr = (const char *)src;
+    const size_t bytesz  = strlen(src_cstr) + 1;
+    char *dst_cstr       = malloc(bytesz);
+    assert(dst_cstr);
+    memcpy(dst_cstr, src_cstr, bytesz);
+    *(char **)dst = dst_cstr;
+}
+
+static inline void kConsedCstrPolicy_dtor(void *val) {
+    assert(val);
+    free(val);
+}
+
+static inline size_t kConsedCstrPolicy_hash(const void *val) {
+    const char *cstr         = (const char *)val;
+    CWISS_FxHash_State state = 0;
+    const size_t len         = strlen(cstr);
+    CWISS_FxHash_Write(&state, &len, sizeof(len));
+    CWISS_FxHash_Write(&state, cstr, len);
+    return state;
+}
+
+static inline bool kConsedCstrPolicy_eq(const void *a, const void *b) {
+    return a == b;
+}
+
+CWISS_DECLARE_FLAT_SET_POLICY(kConsedCstrPolicy, const char *, (obj_copy, kConsedCstrPolicy_copy),
+                              (obj_dtor, kConsedCstrPolicy_dtor),
+                              (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq));
+
+CWISS_DECLARE_HASHSET_WITH(ConsedCstrSet, const char *, kConsedCstrPolicy);
+
 void *_Nonnull stream_filter_for_pid(pid_t pid, size_t *_Nullable sz) {
     // <dict>
     //     <key>pid</key> <!-- filter type -->
@@ -115,6 +150,19 @@ int main(int argc, const char **argv) {
     pid_t pid = atoi(argv[1]);
     // os_log_t logger = os_log_create("vin.je.applespi-log", "applespi-log-cat");
     // os_log(logger, "test before pid: %{public}d", pid);
+
+    ConsedCstrSet set = ConsedCstrSet_new(8);
+
+    for (int i = 0; i < 8; ++i) {
+        int val = i * i + 1;
+        char str[32];
+        snprintf(str, sizeof(str), "%d", val);
+        const char *cstr = (const char *)cstr;
+        ConsedCstrSet_dump(&set);
+        ConsedCstrSet_insert(&set, &cstr);
+    }
+    ConsedCstrSet_dump(&set);
+    printf("ConsedCstrSet test done");
 
     const xpc_connection_t xpc_con =
         xpc_connection_create_mach_service("com.apple.diagnosticd", DISPATCH_TARGET_QUEUE_DEFAULT,
