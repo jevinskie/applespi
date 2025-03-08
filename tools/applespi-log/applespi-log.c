@@ -173,11 +173,12 @@ static inline bool kConsedCstrPolicy_eq(const void *a, const void *b) {
     }
 }
 
-CWISS_DECLARE_FLAT_SET_POLICY(kConsedCstrPolicy, consed_cstr_t, (obj_copy, kConsedCstrPolicy_copy),
+CWISS_DECLARE_FLAT_SET_POLICY(kConsedCstrPolicy, consed_cstr_t *,
+                              (obj_copy, kConsedCstrPolicy_copy),
                               (obj_dtor, kConsedCstrPolicy_dtor),
                               (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq));
 
-CWISS_DECLARE_HASHSET_WITH(ConsedCstrSet, const char *, kConsedCstrPolicy);
+CWISS_DECLARE_HASHSET_WITH(ConsedCstrSet, consed_cstr_t *, kConsedCstrPolicy);
 
 void *_Nonnull stream_filter_for_pid(pid_t pid, size_t *_Nullable sz) {
     // <dict>
@@ -299,16 +300,17 @@ int main(int argc, const char **argv) {
         consed_cstr_t *ccstr = make_consd_cstr(cstr);
         printf("adding3 str %p aka '%s'\n", ccstr, ccstr->cstr);
         // ConsedCstrSet_dump(&set);
-        ConsedCstrSet_insert(&set, &cstr);
+        ConsedCstrSet_insert(&set, &ccstr);
     }
     // ConsedCstrSet_dump(&set);
-    consed_cstr_t *ccstrptrs[3000] = {};
+    consed_cstr_t **ccstrptrs[3000] = {};
     printf("entries:\n");
     size_t idx            = 0;
     ConsedCstrSet_Iter it = ConsedCstrSet_iter(&set);
-    for (consed_cstr_t *p = ConsedCstrSet_Iter_get(&it); p != NULL;
-         p                = ConsedCstrSet_Iter_next(&it)) {
-        printf("p: %p '%s' len: %zu hash: 0x%zx\n", p, p->cstr, p->len_w_nul, p->hash);
+    for (consed_cstr_t **p = ConsedCstrSet_Iter_get(&it); p != NULL;
+         p                 = ConsedCstrSet_Iter_next(&it)) {
+        printf("p: %p *p: %p '%s' len: %zu hash: 0x%zx\n", p, *p, (*p)->cstr, (*p)->len_w_nul,
+               (*p)->hash);
         ccstrptrs[idx++] = p;
     }
     size_t num_strptrs = idx;
@@ -316,18 +318,18 @@ int main(int argc, const char **argv) {
     printf("\n");
 
     for (size_t i = 0; i < num_strptrs; ++i) {
-        consed_cstr_t *ccstr = ccstrptrs[i];
-        printf("adding4 p: %p &p: %p '%s' len: %zu hash: 0x%zx\n", ccstr, &ccstr, ccstr->cstr,
-               ccstr->len_w_nul, ccstr->hash);
-        ConsedCstrSet_insert(&set, &ccstr);
+        consed_cstr_t **ccstr = ccstrptrs[i];
+        printf("adding4 p: %p *p: %p '%s' len: %zu hash: 0x%zx\n", ccstr, *ccstr, (*ccstr)->cstr,
+               (*ccstr)->len_w_nul, (*ccstr)->hash);
+        ConsedCstrSet_insert(&set, ccstr);
     }
 
     printf("entries after:\n");
     it = ConsedCstrSet_iter(&set);
-    for (consed_cstr_t *p = ConsedCstrSet_Iter_get(&it); p != NULL;
-         p                = ConsedCstrSet_Iter_next(&it)) {
-        printf("p: %p '%s' len: %zu hash: 0x%zx\n", p, p->cstr, p->len_w_nul, p->hash);
-        ccstrptrs[idx++] = p;
+    for (consed_cstr_t **p = ConsedCstrSet_Iter_get(&it); p != NULL;
+         p                 = ConsedCstrSet_Iter_next(&it)) {
+        printf("p: %p *p: %p '%s' len: %zu hash: 0x%zx\n", p, *p, (*p)->cstr, (*p)->len_w_nul,
+               (*p)->hash);
     }
     printf("\n");
 
