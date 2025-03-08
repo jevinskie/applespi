@@ -1,13 +1,15 @@
-#include <unistd.h>
+#include <sys/qos.h>
 #undef NDEBUG
 #include <assert.h>
 
 #include <CoreFoundation/CoreFoundation.h>
 #include <dispatch/dispatch.h>
+#include <os/log.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <xpc/xpc.h>
 
 void *_Nonnull stream_filter_for_pid(pid_t pid, size_t *_Nullable sz) {
@@ -97,6 +99,8 @@ int main(int argc, const char **argv) {
     dispatch_resume(signal_source);
 
     pid_t pid = atoi(argv[1]);
+    // os_log_t logger = os_log_create("vin.je.applespi-log", "applespi-log-cat");
+    // os_log(logger, "test before pid: %{public}d", pid);
 
     const xpc_connection_t xpc_con =
         xpc_connection_create_mach_service("com.apple.diagnosticd", DISPATCH_TARGET_QUEUE_DEFAULT,
@@ -110,18 +114,25 @@ int main(int argc, const char **argv) {
     xpc_dictionary_set_uint64(start_req, "action", 3);
     xpc_dictionary_set_uint64(start_req, "flags", 0x800 | 0x2 | 0x1);
     xpc_dictionary_set_uint64(start_req, "types", 8);
+    if (pid == -2) {
+        pid = getpid();
+    }
     if (pid >= 0) {
-        pid                       = getpid();
-        size_t filter_sz          = 0;
-        const uint8_t *filter_buf = stream_filter_for_pid(pid, &filter_sz);
+        size_t filter_sz    = 0;
+        uint8_t *filter_buf = stream_filter_for_pid(pid, &filter_sz);
         assert(filter_buf);
         assert(filter_sz);
         for (size_t i = 0; i < filter_sz; ++i) {
             printf("%02hhx\n", filter_buf[i]);
         }
         xpc_dictionary_set_data(start_req, "stream_filter", filter_buf, filter_sz);
+        free(filter_buf);
     }
     printf("con_send_obj obj: %p desc: '%s'\n", start_req, xpc_copy_description(start_req));
+    // dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1000000000),
+    // dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{ os_log(logger, "test after 1 second
+    // %{public}zu", sizeof(start_req));
+    // });
     xpc_connection_send_message(xpc_con, start_req);
     dispatch_main();
     // while (true) {

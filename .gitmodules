@@ -1,0 +1,3 @@
+[submodule "3rdparty/cwisstable"]
+	path = 3rdparty/cwisstable
+	url = https://github.com/google/cwisstable
