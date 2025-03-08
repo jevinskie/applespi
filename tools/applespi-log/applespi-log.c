@@ -272,6 +272,7 @@ int main(int argc, const char **argv) {
 
     ConsedCstrSet set = ConsedCstrSet_new(8);
 
+    printf("\n\n\n\n======= ROUND ONE BEGIN =======\n\n");
     for (int i = 0; i < 8; ++i) {
         int val = i * i + 1;
         char str[32];
@@ -282,6 +283,8 @@ int main(int argc, const char **argv) {
         // ConsedCstrSet_dump(&set);
         ConsedCstrSet_insert(&set, &ccstr);
     }
+    printf("\n\n======= ROUND TWO END =======\n\n");
+
     for (int i = 2000; i < 2000 + 8; ++i) {
         int val = i;
         char str[32];
@@ -292,6 +295,9 @@ int main(int argc, const char **argv) {
         // ConsedCstrSet_dump(&set);
         ConsedCstrSet_insert(&set, &ccstr);
     }
+    printf("\n\n======= ROUND TWO END =======\n\n");
+
+    printf("\n\n\n\n======= ROUND THREE BEGIN =======\n\n");
     for (int i = 2000; i < 2000 + 8; ++i) {
         int val = i;
         char str[32];
@@ -302,6 +308,9 @@ int main(int argc, const char **argv) {
         // ConsedCstrSet_dump(&set);
         ConsedCstrSet_insert(&set, &ccstr);
     }
+    printf("\n\n======= ROUND THREE END =======\n\n");
+
+    printf("\n\n\n\n======= ROUND FOUR BEGIN =======\n\n");
     // ConsedCstrSet_dump(&set);
     consed_cstr_t **ccstrptrs[3000] = {};
     printf("entries:\n");
@@ -316,14 +325,18 @@ int main(int argc, const char **argv) {
     size_t num_strptrs = idx;
     idx                = 0;
     printf("\n");
+    printf("\n\n======= ROUND FOUR END =======\n\n");
 
+    printf("\n\n\n\n======= ROUND FIVE BEGIN =======\n\n");
     for (size_t i = 0; i < num_strptrs; ++i) {
         consed_cstr_t **ccstr = ccstrptrs[i];
         printf("adding4 p: %p *p: %p '%s' len: %zu hash: 0x%zx\n", ccstr, *ccstr, (*ccstr)->cstr,
                (*ccstr)->len_w_nul, (*ccstr)->hash);
         ConsedCstrSet_insert(&set, ccstr);
     }
+    printf("\n\n======= ROUND FIVE END =======\n\n");
 
+    printf("\n\n\n\n======= ROUND SIX BEGIN =======\n\n");
     printf("entries after:\n");
     it = ConsedCstrSet_iter(&set);
     for (consed_cstr_t **p = ConsedCstrSet_Iter_get(&it); p != NULL;
@@ -332,6 +345,7 @@ int main(int argc, const char **argv) {
                (*p)->hash);
     }
     printf("\n");
+    printf("\n\n======= ROUND SIX END =======\n\n");
 
     printf("ConsedCstrSet test done\n");
     exit(0);
