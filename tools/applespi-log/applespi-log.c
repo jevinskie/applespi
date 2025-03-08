@@ -28,16 +28,32 @@ typedef struct subsys_cat_pair_s subsys_cat_pair_t;
 CWISS_DECLARE_FLAT_HASHSET(SCPairSet, subsys_cat_pair_t);
 
 struct consed_cstr_s {
-    uint64_t hash;
+    size_t hash;
     size_t len_w_nul;
-    char cstr[];
+    const char *cstr;
 };
 
 typedef struct consed_cstr_s consed_cstr_t;
 
 static inline size_t kConsedCstrPolicy_hash(const void *val);
 
-static inline void *kConsedCstrPolicy_alloc(size_t size, size_t align) {
+static inline consed_cstr_t *make_consd_cstr(const char *cstr) {
+    assert(cstr);
+    const size_t len      = strlen(cstr);
+    consed_cstr_t *ccstrp = malloc(sizeof(consed_cstr_t) + len + 1);
+    assert(ccstrp);
+    ccstrp->len_w_nul = len + 1;
+    char *cstr_copy   = (char *)((uintptr_t)ccstrp + sizeof(consed_cstr_t));
+    memcpy(cstr_copy, cstr, len + 1);
+    ccstrp->cstr = cstr_copy;
+    ccstrp->hash = 0;
+    kConsedCstrPolicy_hash(&ccstrp);
+    printf("make_consd_cstr: val: %p &val: %p cstr: '%s' len: %zu hash: 0x%zx\n", ccstrp, &ccstrp,
+           ccstrp->cstr, ccstrp->len_w_nul, ccstrp->hash);
+    return ccstrp;
+}
+
+static inline void *kConsedCstrPolicy_alloc_noooo(size_t size, size_t align) {
     (void)align;
     printf("alloc sz: %zu align: %zu\n", size, align);
     void *p = aligned_alloc(align, size);
@@ -46,79 +62,120 @@ static inline void *kConsedCstrPolicy_alloc(size_t size, size_t align) {
     return p;
 }
 
-static inline void kConsedCstrPolicy_free(void *array, size_t size, size_t align) {
-    (void)size;
-    (void)align;
-    free(array);
-}
-
 static inline void kConsedCstrPolicy_copy(void *dst, const void *src) {
-    const char **d = (const char **)dst;
-    const char **s = (const char **)src;
-    printf("copy: dst: %p src: %p dst: 'n/a' src: '%s'\n", d, s, *s);
-    assert(src);
-    assert(dst);
-    // assert(*d);
-    assert(*s);
-    const char *src_cstr = *s;
-    const size_t bytesz  = strlen(src_cstr) + 1;
-    char *dst_cstr       = malloc(bytesz);
-    printf("copy strlen %zu str: '%s' new malloc: %p\n", bytesz, src_cstr, dst_cstr);
-    assert(dst_cstr);
-    memcpy(dst_cstr, src_cstr, bytesz);
-    // *(char **)dst = dst_cstr;
-    *d = dst_cstr;
-    printf("copy end: dst: %p src: %p dst: '%s' src: '%s'\n", dst, src, *d, *s);
+    consed_cstr_t **dccp = (consed_cstr_t **)dst;
+    consed_cstr_t **sccp = (consed_cstr_t **)src;
+    printf("copy: dst: %p src: %p dst: 'n/a' src: '%s'\n", dccp, sccp, (*sccp)->cstr);
+    assert(dccp);
+    assert(sccp);
+    assert((*sccp)->cstr);
+    const size_t src_hash      = (*sccp)->hash;
+    const size_t src_len_w_nul = (*sccp)->len_w_nul;
+    const char *src_cstr       = (*sccp)->cstr;
+    assert(strlen(src_cstr) + 1 == src_len_w_nul);
+    assert((*sccp)->hash != 0);
+
+    uintptr_t scc_u      = (uintptr_t)*sccp;
+    uintptr_t scc_next_u = scc_u + sizeof(consed_cstr_t);
+    uintptr_t scc_cstr_u = (uintptr_t)src_cstr;
+
+    consed_cstr_t *new_ccstr = malloc(sizeof(consed_cstr_t) + src_len_w_nul);
+    assert(new_ccstr);
+    new_ccstr->hash      = src_hash;
+    new_ccstr->len_w_nul = src_len_w_nul;
+    char *new_cstr       = (char *)((uintptr_t)new_ccstr + sizeof(consed_cstr_t));
+    memcpy(new_cstr, src_cstr, src_len_w_nul);
+    new_ccstr->cstr = new_cstr;
+
+    *dccp = new_ccstr;
+    printf("copy: end dst: %p src: %p dst: '%s' src: '%s'\n", dccp, sccp, (*dccp)->cstr,
+           (*sccp)->cstr);
 }
 
 static inline void kConsedCstrPolicy_dtor(void *val) {
-    printf("dtor: val: %p val: '%s'\n", val, (char *)val);
-    assert(val);
-    consed_cstr_t *ccstr = (consed_cstr_t *)val;
-    free((void *)ccstr->cstr);
-    free(val);
+    if (!val) {
+        fprintf(stderr, "why are you trying to free void?\n");
+        assert(!"don't free void weirdo");
+        return;
+    }
+    consed_cstr_t *ccstrp = (consed_cstr_t *)val;
+    printf("dtor: val: %p cstr: '%s' len: %zu hash: 0x%zx\n", ccstrp, ccstrp->cstr,
+           ccstrp->len_w_nul, ccstrp->hash);
+    uintptr_t val_u      = (uintptr_t)val;
+    uintptr_t val_next_u = val_u + sizeof(consed_cstr_t);
+    uintptr_t cstr_u     = (uintptr_t)ccstrp->cstr;
+    if (cstr_u != val_next_u) {
+        // not a special contiguous layout
+        free((void *)ccstrp->cstr);
+    }
+    free((void *)ccstrp);
 }
 
 static inline size_t kConsedCstrPolicy_hash(const void *val) {
-    printf("hash: val: %p val: '%s'\n", val, *(char **)val);
-    const char *cstr         = *(const char **)val;
+    consed_cstr_t *ccstr = *(consed_cstr_t **)val;
+    printf("hash: val: %p val: '%s'\n", val, ccstr->cstr);
+    if (ccstr->hash != 0) {
+        printf("hash: precalc val: %p val: '%s' state: 0x%16lx\n", val, ccstr->cstr, ccstr->hash);
+        return ccstr->hash;
+    }
     CWISS_FxHash_State state = 0;
-    const size_t len         = strlen(cstr);
-    CWISS_FxHash_Write(&state, &len, sizeof(len));
-    CWISS_FxHash_Write(&state, cstr, len);
-    printf("hash: val: %p val: '%s' state: 0x%16lx\n", val, *(char **)val, state);
+    CWISS_FxHash_Write(&state, &ccstr->len_w_nul, sizeof(ccstr->len_w_nul));
+    CWISS_FxHash_Write(&state, ccstr->cstr, ccstr->len_w_nul - 1);
+    ccstr->hash = state;
+    printf("hash: full calc val: %p val: '%s' state: 0x%16lx\n", val, ccstr->cstr, state);
     return state;
     // return (size_t)(uintptr_t)val;
 }
 
 static inline bool kConsedCstrPolicy_eq(const void *a, const void *b) {
     assert(a && b);
-    const char **ac = (const char **)a;
-    const char **bc = (const char **)b;
-    printf("eq: a: %p b: %p a: *a: %p *b: %p a: '%s' b: '%s'\n", a, b, *ac, *bc, *ac, *bc);
-    assert(*ac && *bc);
-    if (ac == bc) {
+    consed_cstr_t **acc = (consed_cstr_t **)a;
+    consed_cstr_t **bcc = (consed_cstr_t **)b;
+    printf("eq: a: %p b: %p *a: %p *b: %p &a.cstr: %p &b.cstr: %p a.cstr: '%s' b.cstr: '%s' a.len: "
+           "%zu b.len: %zu a.hash: 0x%zx b.hash: 0x%zx\n",
+           acc, bcc, *acc, *bcc, (*acc)->cstr, (*bcc)->cstr, (*acc)->cstr, (*bcc)->cstr,
+           (*acc)->len_w_nul, (*bcc)->len_w_nul, (*acc)->hash, (*bcc)->hash);
+    assert(*acc && *bcc);
+    if (acc == bcc) {
         printf("eq: YES by identity\n");
         return true;
     }
-    if (*ac == *bc) {
+    if (*acc == *bcc) {
         printf("eq: YES by indirect identity\n");
         return true;
     }
-    int differ = strcmp(*ac, *bc);
-    if (!differ) {
-        printf("eq: YES by strcmp\n");
+    int strcmp_res = strcmp((*acc)->cstr, (*bcc)->cstr);
+    if (!strcmp_res) {
+        printf("eq: advise-only: YES by strcmp\n");
     } else {
-        printf("eq: NO by strcmp\n");
+        printf("eq: advise-only: NO by strcmp\n");
     }
-    return !differ;
+    if ((*acc)->hash != (*bcc)->hash) {
+        printf("eq: NO by hash\n");
+        return false;
+    } else {
+        printf("eq: advise-only: YES by hash\n");
+    }
+    if ((*acc)->len_w_nul != (*bcc)->len_w_nul) {
+        printf("eq: NO by len\n");
+        return false;
+    } else {
+        printf("eq: advise-only: YES by len\n");
+    }
+    assert((*acc)->len_w_nul > 0 && (*bcc)->len_w_nul > 0);
+    int memcmp_res = memcmp((*acc)->cstr, (*bcc)->cstr, (*acc)->len_w_nul - 1);
+    if (!memcmp_res) {
+        printf("eq: YES by memcmp\n");
+        return true;
+    } else {
+        printf("eq: NO by memcmp\n");
+        return false;
+    }
 }
 
-CWISS_DECLARE_FLAT_SET_POLICY(kConsedCstrPolicy, char *, (obj_copy, kConsedCstrPolicy_copy),
+CWISS_DECLARE_FLAT_SET_POLICY(kConsedCstrPolicy, consed_cstr_t, (obj_copy, kConsedCstrPolicy_copy),
                               (obj_dtor, kConsedCstrPolicy_dtor),
-                              (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq),
-                              (alloc_alloc, kConsedCstrPolicy_alloc),
-                              (alloc_free, kConsedCstrPolicy_free));
+                              (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq));
 
 CWISS_DECLARE_HASHSET_WITH(ConsedCstrSet, const char *, kConsedCstrPolicy);
 
@@ -218,55 +275,59 @@ int main(int argc, const char **argv) {
         int val = i * i + 1;
         char str[32];
         snprintf(str, sizeof(str), "%d", val);
-        const char *cstr = (const char *)str;
-        printf("adding str %p aka '%s'\n", cstr, cstr);
+        const char *cstr     = (const char *)str;
+        consed_cstr_t *ccstr = make_consd_cstr(cstr);
+        printf("adding str %p aka '%s'\n", ccstr, ccstr->cstr);
         // ConsedCstrSet_dump(&set);
-        ConsedCstrSet_insert(&set, &cstr);
+        ConsedCstrSet_insert(&set, &ccstr);
     }
     for (int i = 2000; i < 2000 + 8; ++i) {
         int val = i;
         char str[32];
         snprintf(str, sizeof(str), "%d", val);
-        const char *cstr = (const char *)str;
-        printf("adding2 str %p aka '%s'\n", cstr, cstr);
+        const char *cstr     = (const char *)str;
+        consed_cstr_t *ccstr = make_consd_cstr(cstr);
+        printf("adding2 str %p aka '%s'\n", ccstr, ccstr->cstr);
         // ConsedCstrSet_dump(&set);
-        ConsedCstrSet_insert(&set, &cstr);
+        ConsedCstrSet_insert(&set, &ccstr);
     }
     for (int i = 2000; i < 2000 + 8; ++i) {
         int val = i;
         char str[32];
         snprintf(str, sizeof(str), "%d", val);
-        const char *cstr = (const char *)str;
-        printf("adding2 str %p aka '%s'\n", cstr, cstr);
+        const char *cstr     = (const char *)str;
+        consed_cstr_t *ccstr = make_consd_cstr(cstr);
+        printf("adding3 str %p aka '%s'\n", ccstr, ccstr->cstr);
         // ConsedCstrSet_dump(&set);
         ConsedCstrSet_insert(&set, &cstr);
     }
     // ConsedCstrSet_dump(&set);
-    const char *strptrs[3000] = {};
+    consed_cstr_t *ccstrptrs[3000] = {};
     printf("entries:\n");
     size_t idx            = 0;
     ConsedCstrSet_Iter it = ConsedCstrSet_iter(&set);
-    for (const char **p = ConsedCstrSet_Iter_get(&it); p != NULL;
-         p              = ConsedCstrSet_Iter_next(&it)) {
-        printf("'%s'\n", *p);
-        printf("p: %p *p: %p *p: '%s'\n", p, *p, *p);
-        strptrs[idx++] = *p;
+    for (consed_cstr_t *p = ConsedCstrSet_Iter_get(&it); p != NULL;
+         p                = ConsedCstrSet_Iter_next(&it)) {
+        printf("p: %p '%s' len: %zu hash: 0x%zx\n", p, p->cstr, p->len_w_nul, p->hash);
+        ccstrptrs[idx++] = p;
     }
     size_t num_strptrs = idx;
     idx                = 0;
     printf("\n");
 
     for (size_t i = 0; i < num_strptrs; ++i) {
-        const char *consed_cstr = strptrs[i];
-        printf("adding3 str %p &str %p aka '%s'\n", consed_cstr, &consed_cstr, consed_cstr);
-        ConsedCstrSet_insert(&set, &consed_cstr);
+        consed_cstr_t *ccstr = ccstrptrs[i];
+        printf("adding4 p: %p &p: %p '%s' len: %zu hash: 0x%zx\n", ccstr, &ccstr, ccstr->cstr,
+               ccstr->len_w_nul, ccstr->hash);
+        ConsedCstrSet_insert(&set, &ccstr);
     }
 
     printf("entries after:\n");
     it = ConsedCstrSet_iter(&set);
-    for (const char **p = ConsedCstrSet_Iter_get(&it); p != NULL;
-         p              = ConsedCstrSet_Iter_next(&it)) {
-        printf("p: %p *p: %p *p: '%s'\n", p, *p, *p);
+    for (consed_cstr_t *p = ConsedCstrSet_Iter_get(&it); p != NULL;
+         p                = ConsedCstrSet_Iter_next(&it)) {
+        printf("p: %p '%s' len: %zu hash: 0x%zx\n", p, p->cstr, p->len_w_nul, p->hash);
+        ccstrptrs[idx++] = p;
     }
     printf("\n");
 
