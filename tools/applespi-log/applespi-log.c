@@ -53,15 +53,6 @@ static inline consed_cstr_t *make_consd_cstr(const char *cstr) {
     return ccstrp;
 }
 
-static inline void *kConsedCstrPolicy_alloc_noooo(size_t size, size_t align) {
-    (void)align;
-    printf("alloc sz: %zu align: %zu\n", size, align);
-    void *p = aligned_alloc(align, size);
-    printf("alloc p: %p\n", p);
-    assert(p);
-    return p;
-}
-
 static inline void kConsedCstrPolicy_copy(void *dst, const void *src) {
     consed_cstr_t **dccp = (consed_cstr_t **)dst;
     consed_cstr_t **sccp = (consed_cstr_t **)src;
@@ -173,7 +164,7 @@ static inline bool kConsedCstrPolicy_eq(const void *a, const void *b) {
     }
 }
 
-CWISS_DECLARE_FLAT_SET_POLICY(kConsedCstrPolicy, consed_cstr_t *,
+CWISS_DECLARE_NODE_SET_POLICY(kConsedCstrPolicy, consed_cstr_t *,
                               (obj_copy, kConsedCstrPolicy_copy),
                               (obj_dtor, kConsedCstrPolicy_dtor),
                               (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq));
