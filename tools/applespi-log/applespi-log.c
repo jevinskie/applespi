@@ -1,4 +1,3 @@
-#include <sys/qos.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -9,8 +8,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/qos.h>
 #include <unistd.h>
 #include <xpc/xpc.h>
+
+#include "applespi/detail/cwisstable.h"
+
+struct subsys_cat_pair_s {
+    const char *subsystem;
+    const char *category;
+};
+
+typedef struct subsys_cat_pair_s subsys_cat_pair_t;
+
+CWISS_DECLARE_FLAT_HASHSET(SCPairSet, subsys_cat_pair_t);
 
 void *_Nonnull stream_filter_for_pid(pid_t pid, size_t *_Nullable sz) {
     // <dict>
