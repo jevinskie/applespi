@@ -27,35 +27,66 @@ typedef struct subsys_cat_pair_s subsys_cat_pair_t;
 CWISS_DECLARE_FLAT_HASHSET(SCPairSet, subsys_cat_pair_t);
 
 static inline void kConsedCstrPolicy_copy(void *dst, const void *src) {
+    const char **d = (const char **)dst;
+    const char **s = (const char **)src;
+    printf("copy: dst: %p src: %p dst: 'n/a' src: '%s'\n", d, s, *s);
     assert(src);
     assert(dst);
-    const char *src_cstr = (const char *)src;
+    // assert(*d);
+    assert(*s);
+    const char *src_cstr = *s;
     const size_t bytesz  = strlen(src_cstr) + 1;
     char *dst_cstr       = malloc(bytesz);
+    printf("copy strlen %zu str: '%s' new malloc: %p\n", bytesz, src_cstr, dst_cstr);
     assert(dst_cstr);
     memcpy(dst_cstr, src_cstr, bytesz);
-    *(char **)dst = dst_cstr;
+    // *(char **)dst = dst_cstr;
+    *d = dst_cstr;
+    printf("copy end: dst: %p src: %p dst: '%s' src: '%s'\n", dst, src, *d, *s);
 }
 
 static inline void kConsedCstrPolicy_dtor(void *val) {
+    printf("dtor: val: %p val: '%s'\n", val, (char *)val);
     assert(val);
     free(val);
 }
 
 static inline size_t kConsedCstrPolicy_hash(const void *val) {
-    const char *cstr         = (const char *)val;
+    printf("hash: val: %p val: '%s'\n", val, *(char **)val);
+    const char *cstr         = *(const char **)val;
     CWISS_FxHash_State state = 0;
     const size_t len         = strlen(cstr);
     CWISS_FxHash_Write(&state, &len, sizeof(len));
     CWISS_FxHash_Write(&state, cstr, len);
+    printf("hash: val: %p val: '%s' state: 0x%16lx\n", val, *(char **)val, state);
     return state;
+    // return (size_t)(uintptr_t)val;
 }
 
 static inline bool kConsedCstrPolicy_eq(const void *a, const void *b) {
-    return a == b;
+    assert(a && b);
+    const char **ac = (const char **)a;
+    const char **bc = (const char **)b;
+    printf("eq: a: %p b: %p a: *a: %p *b: %p a: '%s' b: '%s'\n", a, b, *ac, *bc, *ac, *bc);
+    assert(*ac && *bc);
+    if (ac == bc) {
+        printf("eq: YES by identity\n");
+        return true;
+    }
+    if (*ac == *bc) {
+        printf("eq: YES by indirect identity\n");
+        return true;
+    }
+    int differ = strcmp(*ac, *bc);
+    if (!differ) {
+        printf("eq: YES by strcmp\n");
+    } else {
+        printf("eq: NO by strcmp\n");
+    }
+    return !differ;
 }
 
-CWISS_DECLARE_FLAT_SET_POLICY(kConsedCstrPolicy, const char *, (obj_copy, kConsedCstrPolicy_copy),
+CWISS_DECLARE_FLAT_SET_POLICY(kConsedCstrPolicy, char *, (obj_copy, kConsedCstrPolicy_copy),
                               (obj_dtor, kConsedCstrPolicy_dtor),
                               (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq));
 
@@ -157,11 +188,58 @@ int main(int argc, const char **argv) {
         int val = i * i + 1;
         char str[32];
         snprintf(str, sizeof(str), "%d", val);
-        const char *cstr = (const char *)cstr;
-        ConsedCstrSet_dump(&set);
+        const char *cstr = (const char *)str;
+        printf("adding str %p aka '%s'\n", cstr, cstr);
+        // ConsedCstrSet_dump(&set);
         ConsedCstrSet_insert(&set, &cstr);
     }
-    ConsedCstrSet_dump(&set);
+    for (int i = 2000; i < 2000 + 8; ++i) {
+        int val = i;
+        char str[32];
+        snprintf(str, sizeof(str), "%d", val);
+        const char *cstr = (const char *)str;
+        printf("adding2 str %p aka '%s'\n", cstr, cstr);
+        // ConsedCstrSet_dump(&set);
+        ConsedCstrSet_insert(&set, &cstr);
+    }
+    for (int i = 2000; i < 2000 + 8; ++i) {
+        int val = i;
+        char str[32];
+        snprintf(str, sizeof(str), "%d", val);
+        const char *cstr = (const char *)str;
+        printf("adding2 str %p aka '%s'\n", cstr, cstr);
+        // ConsedCstrSet_dump(&set);
+        ConsedCstrSet_insert(&set, &cstr);
+    }
+    // ConsedCstrSet_dump(&set);
+    const char *strptrs[3000] = {};
+    printf("entries:\n");
+    size_t idx            = 0;
+    ConsedCstrSet_Iter it = ConsedCstrSet_iter(&set);
+    for (const char **p = ConsedCstrSet_Iter_get(&it); p != NULL;
+         p              = ConsedCstrSet_Iter_next(&it)) {
+        printf("'%s'\n", *p);
+        printf("p: %p *p: %p *p: '%s'\n", p, *p, *p);
+        strptrs[idx++] = *p;
+    }
+    size_t num_strptrs = idx;
+    idx                = 0;
+    printf("\n");
+
+    for (size_t i = 0; i < num_strptrs; ++i) {
+        const char *consed_cstr = strptrs[i];
+        printf("adding3 str %p &str %p aka '%s'\n", consed_cstr, &consed_cstr, consed_cstr);
+        ConsedCstrSet_insert(&set, &consed_cstr);
+    }
+
+    printf("entries after:\n");
+    it = ConsedCstrSet_iter(&set);
+    for (const char **p = ConsedCstrSet_Iter_get(&it); p != NULL;
+         p              = ConsedCstrSet_Iter_next(&it)) {
+        printf("p: %p *p: %p *p: '%s'\n", p, *p, *p);
+    }
+    printf("\n");
+
     printf("ConsedCstrSet test done");
 
     const xpc_connection_t xpc_con =
