@@ -16,6 +16,8 @@
 #ifndef STRPOOL_H
 #define STRPOOL_H
 
+#include <assert.h>
+
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -48,11 +50,19 @@ typedef struct {
 #pragma mark cwisstables begin
 
 static inline void kConsedCstrPolicy_copy(void *dst, const void *src) {
-    *(const void **)dst = src;
+    assert(src);
+    assert(dst);
+    const char *src_cstr = (const char *)src;
+    const size_t bytesz  = strlen(src_cstr) + 1;
+    char *dst_cstr       = malloc(bytesz);
+    assert(dst_cstr);
+    memcpy(dst_cstr, src_cstr, bytesz);
+    *(char **)dst = dst_cstr;
 }
 
 static inline void kConsedCstrPolicy_dtor(void *val) {
-    (void)val;
+    assert(val);
+    free(val);
 }
 
 static inline size_t kConsedCstrPolicy_hash(const void *val) {
@@ -68,11 +78,12 @@ static inline bool kConsedCstrPolicy_eq(const void *a, const void *b) {
     return a == b;
 }
 
-CWISS_DECLARE_NODE_MAP_POLICY(kCStrPolicy, const char *, float, (obj_copy, kConsedCstrPolicy_copy),
+CWISS_DECLARE_NODE_MAP_POLICY(kConsedCstrPolicy, const char *, const char *,
+                              (obj_copy, kConsedCstrPolicy_copy),
                               (obj_dtor, kConsedCstrPolicy_dtor),
                               (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq));
 
-CWISS_DECLARE_HASHSET_WITH(ConsedCstrTable, const char *, kCStrPolicy);
+CWISS_DECLARE_HASHSET_WITH(ConsedCstrTable, const char *, kConsedCstrPolicy);
 
 #pragma mark cwisstables end
 
