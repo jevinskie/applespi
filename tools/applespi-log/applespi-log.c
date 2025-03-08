@@ -1,3 +1,4 @@
+#include <alloca.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -26,6 +27,31 @@ typedef struct subsys_cat_pair_s subsys_cat_pair_t;
 
 CWISS_DECLARE_FLAT_HASHSET(SCPairSet, subsys_cat_pair_t);
 
+struct consed_cstr_s {
+    uint64_t hash;
+    size_t len_w_nul;
+    char cstr[];
+};
+
+typedef struct consed_cstr_s consed_cstr_t;
+
+static inline size_t kConsedCstrPolicy_hash(const void *val);
+
+static inline void *kConsedCstrPolicy_alloc(size_t size, size_t align) {
+    (void)align;
+    printf("alloc sz: %zu align: %zu\n", size, align);
+    void *p = aligned_alloc(align, size);
+    printf("alloc p: %p\n", p);
+    assert(p);
+    return p;
+}
+
+static inline void kConsedCstrPolicy_free(void *array, size_t size, size_t align) {
+    (void)size;
+    (void)align;
+    free(array);
+}
+
 static inline void kConsedCstrPolicy_copy(void *dst, const void *src) {
     const char **d = (const char **)dst;
     const char **s = (const char **)src;
@@ -48,6 +74,8 @@ static inline void kConsedCstrPolicy_copy(void *dst, const void *src) {
 static inline void kConsedCstrPolicy_dtor(void *val) {
     printf("dtor: val: %p val: '%s'\n", val, (char *)val);
     assert(val);
+    consed_cstr_t *ccstr = (consed_cstr_t *)val;
+    free((void *)ccstr->cstr);
     free(val);
 }
 
@@ -88,7 +116,9 @@ static inline bool kConsedCstrPolicy_eq(const void *a, const void *b) {
 
 CWISS_DECLARE_FLAT_SET_POLICY(kConsedCstrPolicy, char *, (obj_copy, kConsedCstrPolicy_copy),
                               (obj_dtor, kConsedCstrPolicy_dtor),
-                              (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq));
+                              (key_hash, kConsedCstrPolicy_hash), (key_eq, kConsedCstrPolicy_eq),
+                              (alloc_alloc, kConsedCstrPolicy_alloc),
+                              (alloc_free, kConsedCstrPolicy_free));
 
 CWISS_DECLARE_HASHSET_WITH(ConsedCstrSet, const char *, kConsedCstrPolicy);
 
@@ -240,7 +270,8 @@ int main(int argc, const char **argv) {
     }
     printf("\n");
 
-    printf("ConsedCstrSet test done");
+    printf("ConsedCstrSet test done\n");
+    exit(0);
 
     const xpc_connection_t xpc_con =
         xpc_connection_create_mach_service("com.apple.diagnosticd", DISPATCH_TARGET_QUEUE_DEFAULT,
