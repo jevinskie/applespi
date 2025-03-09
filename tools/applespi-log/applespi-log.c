@@ -17,8 +17,68 @@
 #include <xpc/xpc.h>
 
 #include "applespi/detail/consed_cstr.h"
+#include "applespi/detail/cwisstable.h"
 
 ConsedCstrSet global_string_interning_set;
+
+CWISS_DECLARE_FLAT_HASHSET(SubsystemSet, icstr_t);
+SubsystemSet global_subsystem_set;
+
+__attribute__((constructor)) static void init_subsystem_set(void) {
+    global_subsystem_set = SubsystemSet_new(0);
+}
+
+static inline void record_subsystem(const char *subsystem) {
+    icstr_t subsystem_interned = inter_string(subsystem);
+    SubsystemSet_Insert ins =
+        SubsystemSet_deferred_insert(&global_subsystem_set, &subsystem_interned);
+    icstr_t *cstrp = SubsystemSet_Iter_get(&ins.iter);
+    assert(cstrp);
+    if (ins.inserted) {
+        *cstrp = subsystem_interned;
+        printf("new subsystem: %s\n", subsystem);
+        fflush(stdout);
+    }
+}
+
+static inline void dump_subsystems(void) {
+    printf("subsystems:\n");
+    SubsystemSet_CIter it = SubsystemSet_citer(&global_subsystem_set);
+    for (const icstr_t *p = SubsystemSet_CIter_get(&it); p != NULL;
+         p                = SubsystemSet_CIter_next(&it)) {
+        printf("subsystem: %s\n", *p);
+    }
+    printf("\n");
+}
+
+CWISS_DECLARE_FLAT_HASHSET(CategorySet, icstr_t);
+CategorySet global_category_set;
+
+__attribute__((constructor)) static void init_category_set(void) {
+    global_category_set = CategorySet_new(0);
+}
+
+static inline void record_category(const char *category) {
+    icstr_t category_interned = inter_string(category);
+    CategorySet_Insert ins = CategorySet_deferred_insert(&global_category_set, &category_interned);
+    icstr_t *cstrp         = CategorySet_Iter_get(&ins.iter);
+    assert(cstrp);
+    if (ins.inserted) {
+        *cstrp = category_interned;
+        printf("new category: %s\n", category);
+        fflush(stdout);
+    }
+}
+
+static inline void dump_categories(void) {
+    printf("categories:\n");
+    CategorySet_CIter it = CategorySet_citer(&global_category_set);
+    for (const icstr_t *p = CategorySet_CIter_get(&it); p != NULL;
+         p                = CategorySet_CIter_next(&it)) {
+        printf("category: %s\n", *p);
+    }
+    printf("\n");
+}
 
 void *_Nonnull stream_filter_for_pid(pid_t pid, size_t *_Nullable sz) {
     // <dict>
@@ -79,7 +139,15 @@ static void connection_handler(xpc_connection_t xpc_con) {
 }
 
 static void *event_handler = ^(xpc_object_t _Nonnull xpc_obj) {
-    printf("event_handler obj: %p desc: '%s'\n", xpc_obj, xpc_copy_description(xpc_obj));
+    // printf("event_handler obj: %p desc: '%s'\n", xpc_obj, xpc_copy_description(xpc_obj));
+    const char *subsytem = NULL;
+    const char *category = NULL;
+    if ((subsytem = xpc_dictionary_get_string(xpc_obj, "subsystem"))) {
+        record_subsystem(subsytem);
+    }
+    if ((category = xpc_dictionary_get_string(xpc_obj, "category"))) {
+        record_category(category);
+    }
     return;
 };
 
@@ -89,6 +157,8 @@ static void cancel_handler(xpc_object_t _Nullable xpc_obj) {
 }
 
 static void *signal_handler = ^{
+    dump_subsystems();
+    dump_categories();
     fflush(stdout);
     printf("dispatch signal cancel exit\n");
     fflush(stdout);

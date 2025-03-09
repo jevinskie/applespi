@@ -160,9 +160,8 @@ static inline icstr_t inter_string_to_set(ConsedCstrSet *set, const char *cstr) 
     assert(cstr);
     const char *interned_cstr = NULL;
     consed_cstr_t *ccstr      = NULL;
-    consed_cstr_t **ccstrp    = NULL;
     ConsedCstrSet_Insert ins  = ConsedCstrSet_deferred_insert_by_cstr(set, cstr);
-    ccstrp                    = ConsedCstrSet_Iter_get(&ins.iter);
+    consed_cstr_t **ccstrp    = ConsedCstrSet_Iter_get(&ins.iter);
     assert(ccstrp);
     if (ins.inserted) {
         ccstr                  = make_consd_cstr(cstr);
