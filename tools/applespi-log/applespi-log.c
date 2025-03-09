@@ -1,3 +1,4 @@
+#include <stddef.h>
 #undef NDEBUG
 #include <assert.h>
 
@@ -200,12 +201,36 @@ static inline size_t ConsedCstrSet_cstr_hash(const char *self) {
     return state;
 }
 
-static inline bool ConsedCstrSet_cstr_eq(const char *self, const ConsedCstrSet_Entry *that) {
+static inline bool ConsedCstrSet_cstr_eq(const char *self, consed_cstr_t *const *that) {
     assert(self && that);
     return !strcmp(self, (*that)->cstr);
 }
 
 CWISS_DECLARE_LOOKUP_NAMED(ConsedCstrSet, cstr, char);
+
+const char *inter_string(ConsedCstrSet *set, const char *cstr) {
+    assert(set);
+    assert(cstr);
+    const char *interned_cstr = NULL;
+    consed_cstr_t *ccstr      = NULL;
+    consed_cstr_t **ccstrp    = NULL;
+    ConsedCstrSet_Insert ins  = ConsedCstrSet_deferred_insert_by_cstr(set, cstr);
+    ccstrp                    = ConsedCstrSet_Iter_get(&ins.iter);
+    assert(ccstrp);
+    if (ins.inserted) {
+        ccstrp = ConsedCstrSet_Iter_get(&ins.iter);
+        assert(ccstrp);
+        ccstr                  = make_consd_cstr(cstr);
+        const size_t len_w_nul = strlen(cstr) + 1;
+        memcpy((char *)ccstr->cstr, cstr, len_w_nul);
+        ccstr->hash = ConsedCstrSet_cstr_hash(ccstr->cstr);
+        *ccstrp     = ccstr;
+    } else {
+        ccstr = *ccstrp;
+    }
+    assert(ccstr);
+    return ccstr->cstr;
+}
 
 void *_Nonnull stream_filter_for_pid(pid_t pid, size_t *_Nullable sz) {
     // <dict>
@@ -339,12 +364,12 @@ int main(int argc, const char **argv) {
 
     printf("\n\n\n\n======= ROUND FOUR BEGIN =======\n\n");
     // ConsedCstrSet_dump(&set);
-    consed_cstr_t **ccstrptrs[3000] = {};
+    consed_cstr_t *const *ccstrptrs[3000] = {};
     printf("entries:\n");
-    size_t idx            = 0;
-    ConsedCstrSet_Iter it = ConsedCstrSet_iter(&set);
-    for (consed_cstr_t **p = ConsedCstrSet_Iter_get(&it); p != NULL;
-         p                 = ConsedCstrSet_Iter_next(&it)) {
+    size_t idx             = 0;
+    ConsedCstrSet_CIter it = ConsedCstrSet_citer(&set);
+    for (consed_cstr_t *const *p = ConsedCstrSet_CIter_get(&it); p != NULL;
+         p                       = ConsedCstrSet_CIter_next(&it)) {
         printf("p: %p *p: %p '%s' len: %zu hash: 0x%zx\n", p, *p, (*p)->cstr, (*p)->len_w_nul,
                (*p)->hash);
         ccstrptrs[idx++] = p;
@@ -356,7 +381,7 @@ int main(int argc, const char **argv) {
 
     printf("\n\n\n\n======= ROUND FIVE BEGIN =======\n\n");
     for (size_t i = 0; i < num_strptrs; ++i) {
-        consed_cstr_t **ccstr = ccstrptrs[i];
+        consed_cstr_t *const *ccstr = ccstrptrs[i];
         printf("adding4 p: %p *p: %p '%s' len: %zu hash: 0x%zx\n", ccstr, *ccstr, (*ccstr)->cstr,
                (*ccstr)->len_w_nul, (*ccstr)->hash);
         ConsedCstrSet_insert(&set, ccstr);
@@ -365,9 +390,9 @@ int main(int argc, const char **argv) {
 
     printf("\n\n\n\n======= ROUND SIX BEGIN =======\n\n");
     printf("entries after:\n");
-    it = ConsedCstrSet_iter(&set);
-    for (consed_cstr_t **p = ConsedCstrSet_Iter_get(&it); p != NULL;
-         p                 = ConsedCstrSet_Iter_next(&it)) {
+    it = ConsedCstrSet_citer(&set);
+    for (consed_cstr_t *const *p = ConsedCstrSet_CIter_get(&it); p != NULL;
+         p                       = ConsedCstrSet_CIter_next(&it)) {
         printf("p: %p *p: %p '%s' len: %zu hash: 0x%zx\n", p, *p, (*p)->cstr, (*p)->len_w_nul,
                (*p)->hash);
     }
@@ -390,6 +415,30 @@ int main(int argc, const char **argv) {
         printf("iter_entry: cstr: %p '%s'\n", (*iter_entry)->cstr, (*iter_entry)->cstr);
     }
     printf("\n\n======= ROUND SEVEN END =======\n\n");
+
+    printf("\n\n\n\n======= ROUND EIGHT BEGIN =======\n\n");
+    for (size_t i = 0; i < num_strptrs; ++i) {
+        consed_cstr_t *const *ccstr = ccstrptrs[i];
+        for (int i = 2000; i < 2000 + 10; ++i) {
+            int val = i;
+            char str[32];
+            snprintf(str, sizeof(str), "%d", val);
+            const char *cstr = (const char *)str;
+            inter_string(&set, cstr);
+        }
+    }
+    printf("\n\n======= ROUND EIGHT END =======\n\n");
+
+    printf("\n\n\n\n======= ROUND NINE BEGIN =======\n\n");
+    printf("entries after:\n");
+    it = ConsedCstrSet_citer(&set);
+    for (consed_cstr_t *const *p = ConsedCstrSet_CIter_get(&it); p != NULL;
+         p                       = ConsedCstrSet_CIter_next(&it)) {
+        printf("p: %p *p: %p '%s' len: %zu hash: 0x%zx\n", p, *p, (*p)->cstr, (*p)->len_w_nul,
+               (*p)->hash);
+    }
+    printf("\n");
+    printf("\n\n======= ROUND NINE END =======\n\n");
 
     printf("ConsedCstrSet test done\n");
     exit(0);
