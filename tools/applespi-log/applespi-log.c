@@ -30,7 +30,7 @@ struct {
     mach_port_seqno_t f;
     mach_port_context_t g;
     mach_port_t h;
-} dummy_for_type_import;
+} *dummy_for_type_import;
 
 ConsedCstrSet global_string_interning_set;
 
