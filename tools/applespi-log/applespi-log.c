@@ -18,8 +18,7 @@
 
 #include "applespi/detail/cwisstable.h"
 
-#define NODE_ALLOC_ID 0x7b18352ce0ee2cbfull
-#define SLOT_ALLOC_ID 0x330719b0a951b336ull
+#pragma mark String Interning - begin
 
 typedef const char *icstr_t;
 
@@ -247,6 +246,8 @@ __attribute__((constructor)) static void init_string_interning_set(void) {
 static inline icstr_t inter_string(const char *cstr) {
     return inter_string_to_set(&global_string_interning_set, cstr);
 }
+
+#pragma mark String Interning - end
 
 void *_Nonnull stream_filter_for_pid(pid_t pid, size_t *_Nullable sz) {
     // <dict>
