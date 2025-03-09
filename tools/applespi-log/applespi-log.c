@@ -153,10 +153,10 @@ static void connection_handler(xpc_connection_t xpc_con) {
 
 static void *event_handler = ^(xpc_object_t _Nonnull xpc_obj) {
     // printf("event_handler obj: %p desc: '%s'\n", xpc_obj, xpc_copy_description(xpc_obj));
-    const char *subsytem = NULL;
-    const char *category = NULL;
-    if ((subsytem = xpc_dictionary_get_string(xpc_obj, "subsystem"))) {
-        record_subsystem(subsytem);
+    const char *subsystem = NULL;
+    const char *category  = NULL;
+    if ((subsystem = xpc_dictionary_get_string(xpc_obj, "subsystem"))) {
+        record_subsystem(subsystem);
     }
     if ((category = xpc_dictionary_get_string(xpc_obj, "category"))) {
         record_category(category);
