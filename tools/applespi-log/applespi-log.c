@@ -49,7 +49,7 @@ static inline void record_subsystem(const char *subsystem) {
     assert(cstrp);
     if (ins.inserted) {
         *cstrp = subsystem_interned;
-        printf("new subsystem: %s\n", subsystem);
+        printf("new subsystem: '%s'\n", subsystem);
         fflush(stdout);
     }
 }
@@ -59,7 +59,7 @@ static inline void dump_subsystems(void) {
     SubsystemSet_CIter it = SubsystemSet_citer(&global_subsystem_set);
     for (const icstr_t *p = SubsystemSet_CIter_get(&it); p != NULL;
          p                = SubsystemSet_CIter_next(&it)) {
-        printf("subsystem: %s\n", *p);
+        printf("subsystem: '%s'\n", *p);
     }
     printf("\n");
 }
@@ -78,9 +78,10 @@ static inline void record_category(const char *category) {
     assert(cstrp);
     if (ins.inserted) {
         *cstrp = category_interned;
-        printf("new category: %s\n", category);
+        printf("new category: '%s'\n", category);
         fflush(stdout);
     }
+    fflush(stdout);
 }
 
 static inline void dump_categories(void) {
@@ -88,9 +89,74 @@ static inline void dump_categories(void) {
     CategorySet_CIter it = CategorySet_citer(&global_category_set);
     for (const icstr_t *p = CategorySet_CIter_get(&it); p != NULL;
          p                = CategorySet_CIter_next(&it)) {
-        printf("category: %s\n", *p);
+        printf("category: '%s'\n", *p);
     }
     printf("\n");
+    fflush(stdout);
+}
+
+struct subsys_cat_pair_s {
+    icstr_t subsystem;
+    icstr_t category;
+};
+
+typedef struct subsys_cat_pair_s subsys_cat_pair_t;
+
+CWISS_DECLARE_FLAT_HASHSET(SCPairSet, subsys_cat_pair_t);
+SCPairSet global_subsystem_category_set;
+
+__attribute__((constructor)) static void init_subsystem_category_set(void) {
+    global_subsystem_category_set = SCPairSet_new(0);
+}
+
+static inline void record_subsystem_category(const char *subsystem, const char *category) {
+    assert(subsystem);
+    assert(category);
+    icstr_t subsystem_interned = inter_string(subsystem);
+    icstr_t category_interned  = inter_string(category);
+
+    CategorySet_Insert cins = CategorySet_deferred_insert(&global_category_set, &category_interned);
+    icstr_t *ccstrp         = CategorySet_Iter_get(&cins.iter);
+    assert(ccstrp);
+    if (cins.inserted) {
+        *ccstrp = category_interned;
+        printf("new category: '%s'\n", category);
+    }
+
+    SubsystemSet_Insert sins =
+        SubsystemSet_deferred_insert(&global_subsystem_set, &subsystem_interned);
+    icstr_t *scstrp = SubsystemSet_Iter_get(&sins.iter);
+    assert(scstrp);
+    if (sins.inserted) {
+        *scstrp = subsystem_interned;
+        printf("new subsystem: '%s'\n", subsystem);
+    }
+
+    SCPairSet_Insert scins = SCPairSet_deferred_insert(
+        &global_subsystem_category_set,
+        &(subsys_cat_pair_t){.subsystem = subsystem_interned, .category = category_interned});
+    subsys_cat_pair_t *sccstrp = SCPairSet_Iter_get(&scins.iter);
+    assert(sccstrp);
+    if (scins.inserted) {
+        sccstrp->subsystem = subsystem_interned;
+        sccstrp->category  = category_interned;
+        printf("new subsystem-category: '%s' '%s'\n", subsystem, category);
+    }
+
+    if (cins.inserted || sins.inserted || scins.inserted) {
+        fflush(stdout);
+    }
+}
+
+static inline void dump_subsystem_categories(void) {
+    printf("subsystem-categories:\n");
+    SCPairSet_CIter it = SCPairSet_citer(&global_subsystem_category_set);
+    for (const subsys_cat_pair_t *p = SCPairSet_CIter_get(&it); p != NULL;
+         p                          = SCPairSet_CIter_next(&it)) {
+        printf("subsystem: '%s' category: '%s'\n", p->subsystem, p->category);
+    }
+    printf("\n");
+    fflush(stdout);
 }
 
 void *_Nonnull stream_filter_for_pid(pid_t pid, size_t *_Nullable sz) {
@@ -153,14 +219,9 @@ static void connection_handler(xpc_connection_t xpc_con) {
 
 static void *event_handler = ^(xpc_object_t _Nonnull xpc_obj) {
     // printf("event_handler obj: %p desc: '%s'\n", xpc_obj, xpc_copy_description(xpc_obj));
-    const char *subsystem = NULL;
-    const char *category  = NULL;
-    if ((subsystem = xpc_dictionary_get_string(xpc_obj, "subsystem"))) {
-        record_subsystem(subsystem);
-    }
-    if ((category = xpc_dictionary_get_string(xpc_obj, "category"))) {
-        record_category(category);
-    }
+    const char *subsystem = xpc_dictionary_get_string(xpc_obj, "subsystem");
+    const char *category  = xpc_dictionary_get_string(xpc_obj, "category");
+    record_subsystem_category(subsystem, category);
     return;
 };
 
@@ -172,6 +233,7 @@ static void cancel_handler(xpc_object_t _Nullable xpc_obj) {
 static void *signal_handler = ^{
     dump_subsystems();
     dump_categories();
+    dump_subsystem_categories();
     fflush(stdout);
     printf("dispatch signal cancel exit\n");
     fflush(stdout);

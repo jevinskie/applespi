@@ -15,15 +15,6 @@ extern "C" {
 
 typedef const char *icstr_t;
 
-struct subsys_cat_pair_s {
-    icstr_t subsystem;
-    icstr_t category;
-};
-
-typedef struct subsys_cat_pair_s subsys_cat_pair_t;
-
-CWISS_DECLARE_FLAT_HASHSET(SCPairSet, subsys_cat_pair_t);
-
 struct consed_cstr_s {
     size_t hash;
     size_t len_w_nul;
