@@ -1,3 +1,4 @@
+
 #undef NDEBUG
 #include <assert.h>
 
@@ -5,6 +6,7 @@
 #include <dispatch/dispatch.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <mach/mach.h>
 #include <os/log.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -18,6 +20,17 @@
 
 #include "applespi/detail/consed_cstr.h"
 #include "applespi/detail/cwisstable.h"
+
+struct {
+    mach_msg_kind_t a;
+    mach_msg_header_t b;
+    mach_msg_base_t c;
+    mach_msg_descriptor_t d;
+    mach_msg_bits_t e;
+    mach_port_seqno_t f;
+    mach_port_context_t g;
+    mach_port_t h;
+} dummy_for_type_import;
 
 ConsedCstrSet global_string_interning_set;
 
