@@ -21,9 +21,11 @@
 #define NODE_ALLOC_ID 0x7b18352ce0ee2cbfull
 #define SLOT_ALLOC_ID 0x330719b0a951b336ull
 
+typedef const char *icstr_t;
+
 struct subsys_cat_pair_s {
-    const char *subsystem;
-    const char *category;
+    icstr_t subsystem;
+    icstr_t category;
 };
 
 typedef struct subsys_cat_pair_s subsys_cat_pair_t;
@@ -33,7 +35,7 @@ CWISS_DECLARE_FLAT_HASHSET(SCPairSet, subsys_cat_pair_t);
 struct consed_cstr_s {
     size_t hash;
     size_t len_w_nul;
-    const char *cstr;
+    icstr_t cstr;
 };
 
 typedef struct consed_cstr_s consed_cstr_t;
@@ -116,6 +118,7 @@ static inline void kConsedCstrPolicy_dtor(void *val) {
     uintptr_t cstr_u     = (uintptr_t)ccstrp->cstr;
     if (cstr_u != val_next_u) {
         // not a special contiguous layout
+        printf("freeing non-contig consed_cstr_t: %p cstr: %p\n", ccstrp, ccstrp->cstr);
         free((void *)ccstrp->cstr);
     }
     free((void *)ccstrp);
@@ -134,7 +137,6 @@ static inline size_t kConsedCstrPolicy_hash(const void *val) {
     ccstr->hash = state;
     printf("hash: full calc val: %p val: '%s' state: 0x%16lx\n", val, ccstr->cstr, state);
     return state;
-    // return (size_t)(uintptr_t)val;
 }
 
 static inline bool kConsedCstrPolicy_eq(const void *a, const void *b) {
@@ -203,12 +205,14 @@ static inline size_t ConsedCstrSet_cstr_hash(const char *self) {
 
 static inline bool ConsedCstrSet_cstr_eq(const char *self, consed_cstr_t *const *that) {
     assert(self && that);
+    assert(*that);
+    assert((*that)->cstr);
     return !strcmp(self, (*that)->cstr);
 }
 
 CWISS_DECLARE_LOOKUP_NAMED(ConsedCstrSet, cstr, char);
 
-const char *inter_string(ConsedCstrSet *set, const char *cstr) {
+icstr_t inter_string(ConsedCstrSet *set, const char *cstr) {
     assert(set);
     assert(cstr);
     const char *interned_cstr = NULL;
@@ -417,15 +421,12 @@ int main(int argc, const char **argv) {
     printf("\n\n======= ROUND SEVEN END =======\n\n");
 
     printf("\n\n\n\n======= ROUND EIGHT BEGIN =======\n\n");
-    for (size_t i = 0; i < num_strptrs; ++i) {
-        consed_cstr_t *const *ccstr = ccstrptrs[i];
-        for (int i = 2000; i < 2000 + 10; ++i) {
-            int val = i;
-            char str[32];
-            snprintf(str, sizeof(str), "%d", val);
-            const char *cstr = (const char *)str;
-            inter_string(&set, cstr);
-        }
+    for (int i = 2000; i < 2000 + 10; ++i) {
+        int val = i;
+        char str[32];
+        snprintf(str, sizeof(str), "%d", val);
+        const char *cstr = (const char *)str;
+        inter_string(&set, cstr);
     }
     printf("\n\n======= ROUND EIGHT END =======\n\n");
 
@@ -434,11 +435,22 @@ int main(int argc, const char **argv) {
     it = ConsedCstrSet_citer(&set);
     for (consed_cstr_t *const *p = ConsedCstrSet_CIter_get(&it); p != NULL;
          p                       = ConsedCstrSet_CIter_next(&it)) {
-        printf("p: %p *p: %p '%s' len: %zu hash: 0x%zx\n", p, *p, (*p)->cstr, (*p)->len_w_nul,
-               (*p)->hash);
+        printf("p: %p *p: %p cstr: %p '%s' len: %zu hash: 0x%zx\n", p, *p, (*p)->cstr, (*p)->cstr,
+               (*p)->len_w_nul, (*p)->hash);
     }
     printf("\n");
     printf("\n\n======= ROUND NINE END =======\n\n");
+
+    printf("\n\n\n\n======= ROUND TEN BEGIN =======\n\n");
+    for (int i = 2000; i < 2000 + 10; ++i) {
+        int val = i;
+        char str[32];
+        snprintf(str, sizeof(str), "%d", val);
+        const char *cstr          = (const char *)str;
+        const char *interned_cstr = inter_string(&set, cstr);
+        printf("round10: interned_cstr: %p '%s'\n", interned_cstr, interned_cstr);
+    }
+    printf("\n\n======= ROUND TEN END =======\n\n");
 
     printf("ConsedCstrSet test done\n");
     exit(0);
