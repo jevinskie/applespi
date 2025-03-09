@@ -212,7 +212,7 @@ static inline bool ConsedCstrSet_cstr_eq(const char *self, consed_cstr_t *const 
 
 CWISS_DECLARE_LOOKUP_NAMED(ConsedCstrSet, cstr, char);
 
-icstr_t inter_string(ConsedCstrSet *set, const char *cstr) {
+static inline icstr_t inter_string_to_set(ConsedCstrSet *set, const char *cstr) {
     assert(set);
     assert(cstr);
     const char *interned_cstr = NULL;
@@ -232,6 +232,16 @@ icstr_t inter_string(ConsedCstrSet *set, const char *cstr) {
     }
     assert(ccstr);
     return ccstr->cstr;
+}
+
+ConsedCstrSet global_string_interning_set;
+
+__attribute__((constructor)) static void init_string_interning_set(void) {
+    global_string_interning_set = ConsedCstrSet_new(0);
+}
+
+static inline icstr_t inter_string(const char *cstr) {
+    return inter_string_to_set(&global_string_interning_set, cstr);
 }
 
 void *_Nonnull stream_filter_for_pid(pid_t pid, size_t *_Nullable sz) {
@@ -424,7 +434,7 @@ int main(int argc, const char **argv) {
         char str[32];
         snprintf(str, sizeof(str), "%d", val);
         const char *cstr = (const char *)str;
-        inter_string(&set, cstr);
+        inter_string_to_set(&set, cstr);
     }
     printf("\n\n======= ROUND EIGHT END =======\n\n");
 
@@ -445,7 +455,7 @@ int main(int argc, const char **argv) {
         char str[32];
         snprintf(str, sizeof(str), "%d", val);
         const char *cstr          = (const char *)str;
-        const char *interned_cstr = inter_string(&set, cstr);
+        const char *interned_cstr = inter_string_to_set(&set, cstr);
         printf("round10: interned_cstr: %p '%s'\n", interned_cstr, interned_cstr);
     }
     printf("\n\n======= ROUND TEN END =======\n\n");
