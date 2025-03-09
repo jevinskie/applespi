@@ -222,8 +222,6 @@ icstr_t inter_string(ConsedCstrSet *set, const char *cstr) {
     ccstrp                    = ConsedCstrSet_Iter_get(&ins.iter);
     assert(ccstrp);
     if (ins.inserted) {
-        ccstrp = ConsedCstrSet_Iter_get(&ins.iter);
-        assert(ccstrp);
         ccstr                  = make_consd_cstr(cstr);
         const size_t len_w_nul = strlen(cstr) + 1;
         memcpy((char *)ccstr->cstr, cstr, len_w_nul);
