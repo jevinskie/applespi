@@ -127,7 +127,7 @@ static inline size_t kConsedCstrPolicy_hash(const void *val) {
         printf("hash: precalc val: %p val: '%s' state: 0x%16lx\n", val, ccstr->cstr, ccstr->hash);
         return ccstr->hash;
     }
-    CWISS_FxHash_State state = 0;
+    CWISS_FxHash_State state = CWISS_AbslHash_kInit;
     CWISS_FxHash_Write(&state, &ccstr->len_w_nul, sizeof(ccstr->len_w_nul));
     CWISS_FxHash_Write(&state, ccstr->cstr, ccstr->len_w_nul - 1);
     ccstr->hash = state;
@@ -190,6 +190,22 @@ CWISS_DECLARE_NODE_SET_POLICY(kConsedCstrPolicy, consed_cstr_t *,
                               (alloc_free, kConsedCstrPolicy_free));
 
 CWISS_DECLARE_HASHSET_WITH(ConsedCstrSet, consed_cstr_t *, kConsedCstrPolicy);
+
+static inline size_t ConsedCstrSet_cstr_hash(const char *self) {
+    assert(self);
+    CWISS_FxHash_State state = CWISS_AbslHash_kInit;
+    const size_t len_w_nul   = strlen(self) + 1;
+    CWISS_FxHash_Write(&state, &len_w_nul, sizeof(len_w_nul));
+    CWISS_FxHash_Write(&state, self, len_w_nul - 1);
+    return state;
+}
+
+static inline bool ConsedCstrSet_cstr_eq(const char *self, const ConsedCstrSet_Entry *that) {
+    assert(self && that);
+    return !strcmp(self, (*that)->cstr);
+}
+
+CWISS_DECLARE_LOOKUP_NAMED(ConsedCstrSet, cstr, char);
 
 void *_Nonnull stream_filter_for_pid(pid_t pid, size_t *_Nullable sz) {
     // <dict>
@@ -357,6 +373,23 @@ int main(int argc, const char **argv) {
     }
     printf("\n");
     printf("\n\n======= ROUND SIX END =======\n\n");
+
+    printf("\n\n\n\n======= ROUND SEVEN BEGIN =======\n\n");
+    for (int i = 2000; i < 2000 + 10; ++i) {
+        int val = i;
+        char str[32];
+        snprintf(str, sizeof(str), "%d", val);
+        const char *cstr = (const char *)str;
+        printf("checking7 str %p aka '%s'\n", cstr, cstr);
+        ConsedCstrSet_CIter iter              = ConsedCstrSet_cfind_by_cstr(&set, cstr);
+        const ConsedCstrSet_Entry *iter_entry = ConsedCstrSet_CIter_get(&iter);
+        if (!iter_entry) {
+            printf("iter_entry == NULL! cstr: '%s'\n", cstr);
+            continue;
+        }
+        printf("iter_entry: cstr: %p '%s'\n", (*iter_entry)->cstr, (*iter_entry)->cstr);
+    }
+    printf("\n\n======= ROUND SEVEN END =======\n\n");
 
     printf("ConsedCstrSet test done\n");
     exit(0);
