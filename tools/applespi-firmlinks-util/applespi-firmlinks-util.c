@@ -9,18 +9,34 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/fcntl.h>
+#include <sys/sysctl.h>
 #include <unistd.h>
 #include <uuid/uuid.h>
 
 #include "applespi/apfs_spi.h"
 
+#define UUID_BUF_LEN_W_NUL 37
+
+void get_kern_bootuuid(char uuid_str_buf[UUID_BUF_LEN_W_NUL]) {
+    assert(uuid_str_buf);
+    size_t sz = UUID_BUF_LEN_W_NUL;
+    assert(!sysctlbyname("kern.bootuuid", uuid_str_buf, &sz, NULL, 0));
+}
+
 int main(int argc, const char **argv) {
-    if (argc != 3) {
-        printf("usage: applespi-firmlinks-util <disk> <volume group uuid>\n");
+    if (!(argc == 2 || argc == 3)) {
+        printf("usage: applespi-firmlinks-util <disk> <volume group uuid | optional>\n");
         return 1;
     }
     uuid_t volume_group_id;
-    uuid_parse(argv[2], volume_group_id);
+    if (argc == 3) {
+        assert(!uuid_parse(argv[2], volume_group_id));
+    } else {
+        char uuid_str[UUID_BUF_LEN_W_NUL] = {0};
+        get_kern_bootuuid(uuid_str);
+        printf("kern.bootuuid: %s\n", uuid_str);
+        assert(!uuid_parse(uuid_str, volume_group_id));
+    }
     CFMutableArrayRef firmlinks = NULL;
     const OSStatus getfl_res =
         APFSContainerVolumeGroupGetFirmlinks(argv[1], volume_group_id, &firmlinks);
