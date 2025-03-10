@@ -20,7 +20,7 @@ int main(int argc, const char **argv) {
         return 1;
     }
     uuid_t volume_group_id;
-    uuid_parse(argv[1], volume_group_id);
+    uuid_parse(argv[2], volume_group_id);
     CFMutableArrayRef firmlinks = NULL;
     const OSStatus getfl_res =
         APFSContainerVolumeGroupGetFirmlinks(argv[1], volume_group_id, &firmlinks);
