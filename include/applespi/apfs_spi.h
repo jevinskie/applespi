@@ -4,7 +4,7 @@
 extern "C" {
 #endif
 
-#include <CoreFoundation/CoreFoundation.h>
+#include <CoreFoundation/CFArray.h>
 #include <MacTypes.h>
 #include <uuid/uuid.h>
 
