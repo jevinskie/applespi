@@ -34,14 +34,15 @@ int main(int argc, const char **argv) {
         assert(!uuid_parse(argv[2], volume_group_id));
     }
     char dev_buf[PATH_MAX];
+    if (argc == 2 || argc == 3) {
+        strncpy(dev_buf, argv[1], sizeof(dev_buf));
+        dev_buf[sizeof(dev_buf) - 1] = '\0';
+    }
     if (argc == 1 || argc == 2) {
         char uuid_str[UUID_BUF_LEN_W_NUL] = {0};
         get_kern_bootuuid(uuid_str);
         printf("kern.bootuuid: %s\n", uuid_str);
         assert(!uuid_parse(uuid_str, volume_group_id));
-        if (argc == 2) {
-            strncpy(dev_buf, argv[1], sizeof(dev_buf) - 1);
-        }
     }
     if (argc == 1) {
 
