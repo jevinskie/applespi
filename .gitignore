@@ -1,6 +1,9 @@
 # cmake build folders
 /build*/
 
+# junk
+/tmp/
+
 # vscode
 **/.vscode/
 **/.vscode-ctags
