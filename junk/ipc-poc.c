@@ -145,7 +145,7 @@ int main() {
                                     {
                                         .msgh_bits = MACH_MSGH_BITS(MACH_MSG_TYPE_COPY_SEND, 0) |
                                                      MACH_MSGH_BITS_COMPLEX,
-                                        .msgh_size        = sizeof(struct port_msg),
+                                        .msgh_size = sizeof(struct port_msg),
                                         .msgh_remote_port = fake_bsp,
                                         .msgh_local_port  = MACH_PORT_NULL,
                                     },

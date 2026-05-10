@@ -29,8 +29,8 @@ requires-python = ">=3.12"
 [project.optional-dependencies]
 dev = [
   "mypy>=1.15.0",
-  "pre-commit>=4.1.0",
-  "ruff>=0.9.7",
+  "prek>=0.3.13",
+  "ruff>=0.15.12",
   "ssort>=0.14.0"
 ]
 
@@ -42,10 +42,14 @@ repository = "https://github.com/jevinskie/applespi"
 
 [tool.ruff]
 line-length = 100
+preview = true
+required-version = ">=0.15"
+show-fixes = true
 target-version = "py312"
+unsafe-fixes = true
 
 [tool.ruff.lint]
-extend-select = ["I"]
+extend-select = ["I", "PERF", "RUF", "FA", "UP"]
 
 [tool.setuptools]
 package-dir = {"" = "python/src"}
